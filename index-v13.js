@@ -943,7 +943,7 @@ async function handleHelpCommand(message) {
       .addField(`${prefix}ticketkur`, 'Ticket sistemini kur ve paneli gönder (Sadece yetkililer)', false)
       // .ticket komutu kaldırıldı, artık panel kullanılıyor
       .addField(`${prefix}ticketlarım`, 'Oluşturduğunuz ticketları listele', false)
-      .addField(`${prefix}ticketstats`, 'Yetkililerin kaç ticket kapattığını göster (Sadece yetkililer)', false)
+      .addField(`${prefix}yt`, 'Yetkililerin kaç ticket kapattığını göster (Sadece yetkililer)', false)
       .addField(`${prefix}help`, 'Bu yardım mesajını göster', false)
       .setFooter({ text: 'Porsuk Support Ticket Sistemi' });
     
@@ -1250,7 +1250,7 @@ client.on('messageCreate', async (message) => {
     // .ticket komutu kaldırıldı
     } else if (command === 'ticketlarım' || command === 'ticketlarim') {
       await handleTicketlarimCommand(message);
-    } else if (command === 'ticketstats') {
+    } else if (command === 'yt' || command === 'ticketstats') {
       await handleTicketStatsCommand(message);
     } else if (command === 'help' || command === 'yardım' || command === 'yardim') {
       await handleHelpCommand(message);
