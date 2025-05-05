@@ -40,8 +40,7 @@ const memoryStorage = {
   botSettings: new Collection(),
   ticketResponses: new Collection(),
   lastTicketId: 0,
-  lastTicketNumbers: new Map(), // Guild ID => Last ticket number
-  staffRoles: new Map() // Guild ID => Staff Role ID
+  lastTicketNumbers: new Map() // Guild ID => Last ticket number
 };
 
 // Örnek kategoriler (hafıza)
@@ -74,15 +73,6 @@ const storage = {
       memoryStorage.botSettings.set(guildId, settings);
     }
     return settings;
-  },
-  
-  async setStaffRole(guildId, roleId) {
-    memoryStorage.staffRoles.set(guildId, roleId);
-    return roleId;
-  },
-  
-  async getStaffRole(guildId) {
-    return memoryStorage.staffRoles.get(guildId);
   },
   
   async getAllCategories() {
@@ -301,23 +291,6 @@ const storage = {
   }
 };
 
-// Yardımcı fonksiyonlar
-function isStaffMember(member) {
-  // Kullanıcının server yöneticisi yetkisi varsa
-  if (member && member.permissions.has(PermissionFlagsBits.Administrator)) {
-    return true;
-  }
-  
-  // Veya rolü moderatör/yetkili rollerinden biriyse (rol adına göre kontrol)
-  const staffRoleNames = ['staff', 'yetkili', 'mod', 'moderator', 'moderatör', 'admin', 'yönetici'];
-  
-  const hasStaffRole = member && member.roles.cache.some(role => 
-    staffRoleNames.some(staffRole => role.name.toLowerCase().includes(staffRole))
-  );
-  
-  return hasStaffRole;
-}
-
 // Embed functions
 async function createTicketPanelEmbed(guildId) {
   // Get guild settings to get the prefix
@@ -366,7 +339,7 @@ async function createNewTicketEmbed(ticket) {
     .addFields(
       {
         name: '👤 Açan:',
-        value: `<@${ticket.user_discord_id || 'Bilinmeyen Kullanıcı'}>`,
+        value: `@${ticket.user_username || 'Bilinmeyen Kullanıcı'}`,
         inline: false
       },
       {
@@ -499,64 +472,16 @@ function createTicketListEmbed(tickets) {
 
 // Command handlers
 async function handleTicketKurCommand(message) {
-  // Check if user has staff or admin permissions
-  if (!isStaffMember(message.member)) {
-    return message.reply({ content: 'Bu komutu kullanabilmek için yetkili olmalısın delikanlı.' });
+  // Check if user has admin permissions
+  if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+    return message.reply({ content: 'Bu komutu kullanabilmek için yönetici yetkisine sahip olmalısın delikanlı.' });
   }
   
   try {
-    // Sunucudaki roller
-    const roles = message.guild.roles.cache.filter(role => 
-      !role.managed && role.id !== message.guild.id
-    ).map(role => {
-      return {
-        label: role.name, 
-        value: role.id,
-        description: `ID: ${role.id}`
-      };
-    }).slice(0, 25); // Discord 25'ten fazla seçeneğe izin vermiyor
+    const { embed, row } = await createTicketPanelEmbed(message.guild.id);
+    await message.channel.send({ embeds: [embed], components: [row] });
     
-    // Seçim menüsü
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('staff_role_select')
-      .setPlaceholder('Yetkili rolünü seçin')
-      .addOptions(roles);
-      
-    const row = new ActionRowBuilder().addComponents(selectMenu);
-    
-    await message.reply({ 
-      content: 'Lütfen ticket sistemi için yetkili rolünü seçin:', 
-      components: [row] 
-    });
-    
-    // Rol seçimini bekle
-    const filter = i => i.customId === 'staff_role_select' && i.user.id === message.author.id;
-    
-    try {
-      const roleSelection = await message.channel.awaitMessageComponent({ filter, time: 60000 });
-      const selectedRoleId = roleSelection.values[0];
-      const selectedRole = message.guild.roles.cache.get(selectedRoleId);
-      
-      if (!selectedRole) {
-        return message.channel.send('Geçersiz rol seçimi. İşlem iptal edildi.');
-      }
-      
-      // Rolü kaydet
-      await storage.setStaffRole(message.guild.id, selectedRoleId);
-      
-      // Ticket panelini oluştur
-      const { embed, row } = await createTicketPanelEmbed(message.guild.id);
-      await message.channel.send({ 
-        content: `✅ Yetkili rolü olarak **${selectedRole.name}** ayarlandı! Bu rol her ticket açıldığında etiketlenecek.`,
-        embeds: [embed], 
-        components: [row] 
-      });
-      
-      await roleSelection.update({ content: `Yetkili rolü olarak **${selectedRole.name}** seçildi!`, components: [] });
-    } catch (error) {
-      console.error('Role selection error:', error);
-      message.channel.send('Rol seçimi için süre doldu. Lütfen tekrar deneyin.');
-    }
+    message.reply({ content: '✅ Ticket paneli başarıyla oluşturuldu!' });
   } catch (error) {
     console.error('Error creating ticket panel:', error);
     message.reply({ content: 'Ticket paneli oluşturulurken bir hata oluştu.' });
@@ -669,21 +594,12 @@ async function handleTicketCreation(interaction, categoryId, description) {
     const channelName = `ticket-${ticketNumber}`;
     
     try {
-      // Ayarlanmış yetkili rolünü al veya varsayılan bir rol bul
-      let staffRoleId = await storage.getStaffRole(guild.id);
-      
-      if (!staffRoleId) {
-        // Yetkili rolü ayarlanmamışsa, otomatik bul
-        const staffRole = guild.roles.cache.find(role => 
-          role.name.toLowerCase().includes('staff') || 
-          role.name.toLowerCase().includes('yetkili') || 
-          role.name.toLowerCase().includes('mod') ||
-          role.name.toLowerCase().includes('admin') ||
-          role.name.toLowerCase().includes('yönetici')
-        );
-        
-        staffRoleId = staffRole ? staffRole.id : guild.id;
-      }
+      // Staff rolü ID'si - BU SATIRI DEĞİŞTİRİN
+      // Sunucudaki yetkili/moderatör rolünün ID'sini girin
+      const staffRoleId = guild.roles.cache.find(role => 
+        role.name.toLowerCase().includes('staff') || 
+        role.name.toLowerCase().includes('yetkili') || 
+        role.name.toLowerCase().includes('mod'))?.id || guild.id;
       
       // Kanal oluştur
       const ticketChannel = await guild.channels.create({
@@ -729,7 +645,6 @@ async function handleTicketCreation(interaction, categoryId, description) {
         category_name: category.name,
         category_emoji: category.emoji,
         user_username: dbUser.username,
-        user_discord_id: dbUser.discord_id,
         description: description,
         created_at: ticket.created_at
       };
@@ -808,7 +723,7 @@ async function handleHelpCommand(message) {
       .addFields(
         {
           name: `${prefix}ticketkur`,
-          value: 'Ticket sistemini kur ve paneli gönder (Sadece yetkililer)',
+          value: 'Ticket sistemini kur ve paneli gönder (Sadece yöneticiler)',
           inline: false
         },
         {
