@@ -463,9 +463,28 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
         // Pin the message
         await message.pin();
         
-        // No need to send staff avatars, they are now included in the embed
+        // Ticket açılış bildirimi gönderme (log kanalına)
+        try {
+          // Sunucudaki log kanalı ID'sini veritabanından al
+          const guildSettings = await storage.getBotSettings(modalInteraction.guild.id);
+          const logChannelId = guildSettings?.logChannelId;
+          
+          // Log kanalı varsa bildirim gönder
+          if (logChannelId) {
+            const logChannel = modalInteraction.guild.channels.cache.get(logChannelId);
+            if (logChannel && logChannel.isTextBased()) {
+              await logChannel.send({
+                content: `📩 Yeni ticket oluşturuldu: <#${channel.id}>\n👤 Açan: <@${modalInteraction.user.id}>\n📂 Kategori: ${ticket.category?.name}`,
+                embeds: [embed]
+              });
+            }
+          }
+        } catch (error) {
+          log(`Log kanalına mesaj gönderme hatası: ${error}`, 'discord');
+          // Hata olursa sessizce devam et, kullanıcıya hata gösterme
+        }
         
-        // Komik mesajları kaldırdık
+        // No need to send staff avatars, they are now included in the embed
         
         // Send confirmation to the user
         await modalInteraction.editReply({
