@@ -1,9 +1,10 @@
 // index.js - Porsuk Ticket Bot - Glitch-optimized version
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
-const { Pool } = require('pg');
-const express = require('express');
-const { format } = require('date-fns');
-const { tr } = require('date-fns/locale');
+import { Client, GatewayIntentBits, Partials, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType, PermissionFlagsBits } from 'discord.js';
+import pg from 'pg';
+const { Pool } = pg;
+import express from 'express';
+import { format } from 'date-fns';
+import { tr } from 'date-fns/locale';
 
 // Glitch'i uyanık tutmak için Express sunucusu
 const app = express();
