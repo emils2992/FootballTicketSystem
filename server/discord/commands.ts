@@ -27,6 +27,7 @@ import {
   createTicketListEmbed,
   createTicketLogEmbed
 } from './embeds';
+import { createWelcomeCard, createSimpleWelcomeCard, createBackupWelcomeCard } from './welcome-card';
 
 // Handle all message commands
 export async function handleCommands(message: Message, prefix: string, client: Client) {
@@ -575,24 +576,36 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
         const randomIndex = Math.floor(Math.random() * welcomeMessages.length);
         const welcomeMessage = welcomeMessages[randomIndex];
         
-        // Rastgele futbol fotoğrafı URL'si
+        // Stadyum arka planlı muhteşem futbol görselleri
         const footballImages = [
-          "https://media.api-sports.io/football/teams/541.png", // Real Madrid
-          "https://media.api-sports.io/football/teams/529.png", // Barcelona
-          "https://media.api-sports.io/football/teams/496.png", // Juventus
-          "https://media.api-sports.io/football/teams/85.png",  // PSG
-          "https://media.api-sports.io/football/teams/165.png", // Dortmund
-          "https://media.api-sports.io/football/teams/50.png",  // Manchester City 
-          "https://media.api-sports.io/football/teams/33.png",  // Manchester United
-          "https://media.api-sports.io/football/teams/40.png",  // Liverpool
-          "https://media.api-sports.io/football/teams/157.png", // Bayern Münih
-          "https://media.api-sports.io/football/teams/6195.png" // Türkiye
+          "https://i.imgur.com/trhpYiG.jpg", // Santiago Bernabeu Stadyumu gece görünümü
+          "https://i.imgur.com/56UdOZK.jpg", // Camp Nou Stadyumu panoramik görünüm
+          "https://i.imgur.com/Wx6xDQa.jpg", // Anfield Stadyumu maç günü atmosferi
+          "https://i.imgur.com/o1dtrGx.jpg", // Old Trafford gece maçı görüntüsü
+          "https://i.imgur.com/T28Ju5d.jpg", // Allianz Arena renkli ışıklandırma
+          "https://i.imgur.com/Fqm4X8J.jpg", // Şampiyonlar Ligi finali atmosferi
+          "https://i.imgur.com/IhUQqbG.jpg", // Stadyum içi büyük pankart ve taraftar
+          "https://i.imgur.com/0Wbh5gB.jpg", // Wembley stadyumu final maçı
+          "https://i.imgur.com/JczRb7h.jpg", // Türk bayrağı ve stadyum
+          "https://i.imgur.com/sRJXQif.jpg"  // Muhteşem gol sevinci ve stadyum
         ];
         
         // Rastgele futbol fotoğrafı seç
         const randomImageIndex = Math.floor(Math.random() * footballImages.length);
         const footballImage = footballImages[randomImageIndex];
         
+        // Özel hoşgeldin kartı oluşturma
+        const welcomeCardUrl = await createWelcomeCard(modalInteraction.user);
+        let simpleCardUrl = ""; // Yedek kart
+
+        // Alternatif olarak farklı bir API de deneyebiliriz
+        try {
+          simpleCardUrl = createSimpleWelcomeCard(modalInteraction.user);
+        } catch (error) {
+          log(`Yedek kart oluşturma hatası: ${error}`, 'discord');
+          simpleCardUrl = createBackupWelcomeCard(modalInteraction.user);
+        }
+
         // Construct a message mentioning the user and convert rows to proper message components
         const messageOptions = {
           content: messageContent,
@@ -602,12 +615,16 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
               title: welcomeMessage,
               color: 0x3498db,
               image: {
-                url: footballImage
+                url: welcomeCardUrl
+              },
+              author: {
+                name: `${modalInteraction.user.username} - Yeni Ticket Açıldı!`,
+                icon_url: modalInteraction.user.displayAvatarURL({ size: 64 })
               },
               footer: {
                 text: footerQuotes[Math.floor(Math.random() * footerQuotes.length)]
               },
-              description: `🎵 **Şampiyonlar Ligi marşı çalıyor!** 🎵\n[Şampiyonlar Ligi marşını dinlemek için tıkla](https://www.youtube.com/watch?v=0Qqd6T_A9LY)`
+              description: `👋 **HOŞGELDİN ${modalInteraction.user.username.toUpperCase()}!**\n\n🎯 Ticket sistemine hoş geldiniz!\n\n🎵 **Şampiyonlar Ligi marşı çalıyor!** 🎵\n[Şampiyonlar Ligi marşını dinlemek için tıkla](https://www.youtube.com/watch?v=0Qqd6T_A9LY)`
             }
           ],
           components: rows // Multiple rows are already in raw JSON format for Discord.js
