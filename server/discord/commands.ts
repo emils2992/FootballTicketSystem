@@ -481,9 +481,17 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
       if (ticketData) {
         const { embed, row, activeStaff } = await createNewTicketEmbed(ticketData);
         
+        // Staff rolünü etiketle
+        let messageContent = `<@${modalInteraction.user.id}>, ticket oluşturuldu.`;
+        
+        // Yetkili rolünü ekle (varsa)
+        if (staffRoleId) {
+          messageContent += `\n<@&${staffRoleId}>, yeni bir ticket açıldı!`;
+        }
+        
         // Construct a message mentioning the user and convert row to proper message component
         const messageOptions = {
-          content: `<@${modalInteraction.user.id}>, ticket oluşturuldu.`,
+          content: messageContent,
           embeds: [embed],
           components: [row] // row is already in raw JSON format for Discord.js
         };

@@ -127,6 +127,7 @@ export async function createNewTicketEmbed(ticket: schema.Ticket & {
       }
     );
 
+  // Daima yetkilileri göster (validStaff boş olsa bile bunu gösterme)
   if (activeStaff.length > 0) {
     // Boş discordId'leri filtrele ve geçerli olanları etiketler olarak ekle
     const validStaff = activeStaff.filter(staff => staff.discordId);
@@ -137,16 +138,24 @@ export async function createNewTicketEmbed(ticket: schema.Ticket & {
       
       embed.addFields({
         name: `👮‍♂️ Yetkili Ekibi (${staffCount} Aktif Yetkili):`,
-        value: staffList || "Aktif yetkili bulunamadı.",
+        value: staffList,
         inline: false
       });
     } else {
+      // Yine de yetkili ekibi fieldını ekle - ama artık "bulunamadı" mesajını gösterme
       embed.addFields({
-        name: `👮‍♂️ Yetkili Ekibi:`,
-        value: "Aktif yetkili bulunamadı. Yetkili rolü ayarlamak için `.ticketkur yetkili @rol` komutunu kullanın.",
+        name: '👮‍♂️ Yetkili Ekibi:',
+        value: 'Yetkililer yakında size yardımcı olacaklar.',
         inline: false
       });
     }
+  } else {
+    // Bu durumda da dostça bir mesaj göster, hata mesajı gösterme
+    embed.addFields({
+      name: '👮‍♂️ Yetkili Ekibi:',
+      value: 'Yetkililer yakında size yardımcı olacaklar.',
+      inline: false
+    });
   }
 
   // Create buttons in raw JSON format
