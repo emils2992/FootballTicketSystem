@@ -720,11 +720,32 @@ async function handleTicketLogCommand(message: Message, args: string[]) {
       return;
     }
     
-    // Get ticket ID from args
+    // Get ticket ID or channel from args
     let ticketId: number | undefined;
     
     if (args.length > 0) {
-      ticketId = parseInt(args[0]);
+      // Check if arg is a channel mention (#channel) format
+      const channelMention = args[0].match(/<#(\d+)>/);
+      
+      if (channelMention && channelMention[1]) {
+        // Etiketlenen kanalı bul
+        const channelId = channelMention[1];
+        const channel = message.guild?.channels.cache.get(channelId);
+        
+        if (channel && channel.name.startsWith('ticket-')) {
+          // Bu bir ticket kanalı ise ID'sini kanaldan al
+          const ticketData = await storage.getTicketByChannelId(channelId);
+          if (ticketData) {
+            ticketId = ticketData.id;
+          }
+        } else {
+          await message.reply('Etiketlenen kanal bir ticket kanalı değil!');
+          return;
+        }
+      } else {
+        // Eğer kanal etiketi değilse normal sayı olarak dene
+        ticketId = parseInt(args[0]);
+      }
     } else {
       // If no ID provided, check if the command is used in a ticket channel
       const channel = message.channel as GuildChannel;
@@ -737,7 +758,7 @@ async function handleTicketLogCommand(message: Message, args: string[]) {
     }
     
     if (!ticketId) {
-      await message.reply('Lütfen geçerli bir ticket ID\'si belirtin!');
+      await message.reply('Lütfen geçerli bir ticket ID\'si veya ticket kanalı etiketleyin. Örnek: `.ticketlog #ticket-1` veya `.ticketlog 5`');
       return;
     }
     
