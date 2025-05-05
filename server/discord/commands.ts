@@ -314,6 +314,57 @@ export async function setupSelectMenuInteraction(client: Client) {
             await handleTicketReply(interaction, ticketId);
           }
         }
+        // Check for reject modals
+        else if (customId.startsWith('reject_modal_')) {
+          const ticketIdMatch = customId.match(/reject_modal_(\d+)/);
+          if (ticketIdMatch && ticketIdMatch[1]) {
+            const ticketId = parseInt(ticketIdMatch[1]);
+            const reason = interaction.fields.getTextInputValue('reject_reason');
+            
+            // Reject the ticket
+            const ticketData = await storage.getTicketById(ticketId);
+            if (ticketData) {
+              await storage.rejectTicket(ticketId, reason);
+              
+              // Try to send DM to user
+              if (ticketData.user?.discordId) {
+                try {
+                  const discordUser = await interaction.client.users.fetch(ticketData.user.discordId);
+                  await discordUser.send({
+                    content: `🔴 **Ticket Reddedildi**\nTicket ID: #${ticketId}\n\nYetkili: ${interaction.user.username}\n\nRed Sebebi: ${reason}`
+                  });
+                } catch (dmError) {
+                  log(`Failed to send DM: ${dmError}`, 'discord');
+                }
+              }
+              
+              // Reply with status
+              await interaction.reply({
+                content: `❌ Ticket reddedildi. ${ticketData.user ? `<@${ticketData.user.discordId}>` : 'Kullanıcı'} bilgilendirildi.`
+              });
+              
+              // Add status message to channel
+              if (ticketData.channelId) {
+                const channel = await interaction.client.channels.fetch(ticketData.channelId) as TextChannel;
+                if (channel) {
+                  await channel.send({
+                    content: `🔴 **Ticket Reddedildi**\nYetkili: <@${interaction.user.id}>\n\nRed Sebebi: ${reason}`,
+                    allowedMentions: { users: [] }
+                  });
+                  
+                  // Schedule deletion
+                  setTimeout(async () => {
+                    try {
+                      await channel.delete('Ticket reddedildi');
+                    } catch (error) {
+                      log(`Error deleting rejected ticket channel: ${error}`, 'discord');
+                    }
+                  }, 30000);
+                }
+              }
+            }
+          }
+        }
       }
     } catch (error) {
       log(`Error handling interaction: ${error}`, 'discord');
@@ -831,6 +882,228 @@ async function handleHelpCommand(message: Message, prefix: string) {
   }
 }
 
+// Accept a ticket
+async function acceptTicket(interaction: ButtonInteraction) {
+  try {
+    // Check if the interaction is in a ticket channel
+    const channel = interaction.channel as GuildChannel;
+    
+    if (!channel || !channel.name.startsWith('ticket-')) {
+      await interaction.reply({
+        content: 'Bu komut sadece ticket kanallarında kullanılabilir!',
+        ephemeral: true
+      });
+      return;
+    }
+    
+    // Get ticket data
+    const ticketData = await storage.getTicketByChannelId(channel.id);
+    
+    if (!ticketData) {
+      await interaction.reply({
+        content: 'Bu kanal için ticket bilgisi bulunamadı!',
+        ephemeral: true
+      });
+      return;
+    }
+    
+    // Check if user has permission
+    const member = interaction.member as GuildMember;
+    const guildId = interaction.guild?.id || 'default_guild';
+    const settings = await storage.getBotSettings(guildId);
+    
+    const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
+    const isStaff = settings?.staffRoleId && member.roles.cache.has(settings.staffRoleId);
+    
+    if (!isAdmin && !isStaff) {
+      await interaction.reply({
+        content: 'Bu ticketı kabul etme yetkiniz yok!',
+        ephemeral: true
+      });
+      return;
+    }
+    
+    // Accept the ticket
+    await storage.acceptTicket(ticketData.id);
+    
+    // Get user info (ticket creator)
+    const user = ticketData.user;
+    
+    if (user && user.discordId) {
+      try {
+        // Try to get user from Discord
+        const discordUser = await interaction.client.users.fetch(user.discordId);
+        
+        if (discordUser) {
+          // Send DM to user
+          await discordUser.send({
+            content: `🟢 **Ticket Kabul Edildi**\nTicket ID: #${ticketData.id}\n\nYetkili: ${interaction.user.username}\n\nYetkili ekibimiz en kısa sürede sizinle ilgilenecek.`
+          });
+        }
+      } catch (error) {
+        log(`Error sending DM to user: ${error}`, 'discord');
+      }
+    }
+    
+    // Reply to interaction
+    await interaction.reply({
+      content: `✅ Ticket kabul edildi. ${user ? `<@${user.discordId}>` : 'Kullanıcı'} bilgilendirildi.`
+    });
+    
+    // Add accepted status message to channel
+    await interaction.channel?.send({
+      content: `🟢 **Ticket Kabul Edildi**\nYetkili: <@${interaction.user.id}>\n\nTicket işleme alındı ve inceleniyor.`,
+      allowedMentions: { users: [] }
+    });
+    
+  } catch (error) {
+    log(`Error accepting ticket: ${error}`, 'discord');
+    await interaction.reply({
+      content: 'Ticket kabul edilirken bir hata oluştu!',
+      ephemeral: true
+    });
+  }
+}
+
+// Reject a ticket
+async function rejectTicket(interaction: ButtonInteraction) {
+  try {
+    // Check if the interaction is in a ticket channel
+    const channel = interaction.channel as GuildChannel;
+    
+    if (!channel || !channel.name.startsWith('ticket-')) {
+      await interaction.reply({
+        content: 'Bu komut sadece ticket kanallarında kullanılabilir!',
+        ephemeral: true
+      });
+      return;
+    }
+    
+    // Get ticket data
+    const ticketData = await storage.getTicketByChannelId(channel.id);
+    
+    if (!ticketData) {
+      await interaction.reply({
+        content: 'Bu kanal için ticket bilgisi bulunamadı!',
+        ephemeral: true
+      });
+      return;
+    }
+    
+    // Check if user has permission
+    const member = interaction.member as GuildMember;
+    const guildId = interaction.guild?.id || 'default_guild';
+    const settings = await storage.getBotSettings(guildId);
+    
+    const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
+    const isStaff = settings?.staffRoleId && member.roles.cache.has(settings.staffRoleId);
+    
+    if (!isAdmin && !isStaff) {
+      await interaction.reply({
+        content: 'Bu ticketı reddetme yetkiniz yok!',
+        ephemeral: true
+      });
+      return;
+    }
+    
+    // Create reject reason modal
+    const modal = new ModalBuilder()
+      .setCustomId(`reject_modal_${ticketData.id}`)
+      .setTitle('Reddetme Sebebi');
+    
+    // Add reason input
+    const reasonInput = new TextInputBuilder()
+      .setCustomId('reject_reason')
+      .setLabel('Reddetme Sebebi')
+      .setPlaceholder('Ticketı neden reddediyorsunuz?')
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true)
+      .setMinLength(1)
+      .setMaxLength(1000);
+    
+    // Create action row with input
+    const reasonRow = new ActionRowBuilder<TextInputBuilder>()
+      .addComponents(reasonInput);
+    
+    // Add row to modal
+    modal.addComponents(reasonRow);
+    
+    // Show modal
+    await interaction.showModal(modal);
+    
+    // Set up modal submit collector
+    const filter = (i: ModalSubmitInteraction) => 
+      i.customId === `reject_modal_${ticketData.id}` && i.user.id === interaction.user.id;
+    
+    interaction.awaitModalSubmit({ filter, time: 60000 })
+      .then(async (modalInteraction) => {
+        try {
+          // Get reason from modal
+          const reason = modalInteraction.fields.getTextInputValue('reject_reason');
+          
+          // Reject the ticket
+          await storage.rejectTicket(ticketData.id, reason);
+          
+          // Get user info (ticket creator)
+          const user = ticketData.user;
+          
+          if (user && user.discordId) {
+            try {
+              // Try to get user from Discord
+              const discordUser = await interaction.client.users.fetch(user.discordId);
+              
+              if (discordUser) {
+                // Send DM to user
+                await discordUser.send({
+                  content: `🔴 **Ticket Reddedildi**\nTicket ID: #${ticketData.id}\n\nYetkili: ${interaction.user.username}\n\nRed Sebebi: ${reason}`
+                });
+              }
+            } catch (error) {
+              log(`Error sending DM to user: ${error}`, 'discord');
+            }
+          }
+          
+          // Reply to interaction
+          await modalInteraction.reply({
+            content: `❌ Ticket reddedildi. ${user ? `<@${user.discordId}>` : 'Kullanıcı'} bilgilendirildi.`
+          });
+          
+          // Add rejected status message to channel
+          await interaction.channel?.send({
+            content: `🔴 **Ticket Reddedildi**\nYetkili: <@${interaction.user.id}>\n\nRed Sebebi: ${reason}`,
+            allowedMentions: { users: [] }
+          });
+          
+          // Close ticket channel after 30 seconds
+          setTimeout(async () => {
+            try {
+              await channel.delete('Ticket reddedildi');
+            } catch (error) {
+              log(`Error deleting rejected ticket channel: ${error}`, 'discord');
+            }
+          }, 30000);
+          
+        } catch (error) {
+          log(`Error processing reject reason: ${error}`, 'discord');
+          await modalInteraction.reply({
+            content: 'Ticket reddedilirken bir hata oluştu!',
+            ephemeral: true
+          });
+        }
+      })
+      .catch((error) => {
+        log(`Error in reject modal submission: ${error}`, 'discord');
+      });
+    
+  } catch (error) {
+    log(`Error rejecting ticket: ${error}`, 'discord');
+    await interaction.reply({
+      content: 'Ticket reddedilirken bir hata oluştu!',
+      ephemeral: true
+    });
+  }
+}
+
 // Show user's tickets
 async function showUserTickets(interaction: ButtonInteraction) {
   try {
@@ -858,10 +1131,12 @@ async function showUserTickets(interaction: ButtonInteraction) {
     
   } catch (error) {
     log(`Error showing user tickets: ${error}`, 'discord');
-    await interaction.reply({
-      content: 'Ticketlarınız gösterilirken bir hata oluştu!',
-      ephemeral: true
-    });
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: 'Ticketlarınız gösterilirken bir hata oluştu!',
+        ephemeral: true
+      });
+    }
   }
 }
 
@@ -939,10 +1214,12 @@ async function closeTicket(interaction: ButtonInteraction) {
     
   } catch (error) {
     log(`Error closing ticket: ${error}`, 'discord');
-    await interaction.reply({
-      content: 'Ticket kapatılırken bir hata oluştu!',
-      ephemeral: true
-    });
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: 'Ticket kapatılırken bir hata oluştu!',
+        ephemeral: true
+      });
+    }
   }
 }
 
@@ -1027,10 +1304,12 @@ async function replyToTicket(interaction: ButtonInteraction) {
     
   } catch (error) {
     log(`Error replying to ticket: ${error}`, 'discord');
-    await interaction.reply({
-      content: 'Yanıt verme sırasında bir hata oluştu!',
-      ephemeral: true
-    });
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: 'Yanıt verme sırasında bir hata oluştu!',
+        ephemeral: true
+      });
+    }
   }
 }
 
@@ -1084,9 +1363,11 @@ async function handleTicketReply(modalInteraction: ModalSubmitInteraction, ticke
     
   } catch (error) {
     log(`Error handling ticket reply: ${error}`, 'discord');
-    await modalInteraction.reply({
-      content: 'Yanıtınız gönderilirken bir hata oluştu!',
-      ephemeral: true
-    });
+    if (!modalInteraction.replied && !modalInteraction.deferred) {
+      await modalInteraction.reply({
+        content: 'Yanıtınız gönderilirken bir hata oluştu!',
+        ephemeral: true
+      });
+    }
   }
 }
