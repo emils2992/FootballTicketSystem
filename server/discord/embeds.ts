@@ -35,47 +35,18 @@ export async function createTicketPanelEmbed(guildId: string) {
       'Bir sorun, talep veya delikanlı gibi açıklaman mı var?\n\n' +
       '👇 Aşağıdaki seçeneklerle bir ticket oluşturabilirsin.'
     )
-    .addFields(
-      {
-        name: '📸 Aktif Yetkililer:',
-        value: activeStaff.map(staff => `\`@${staff.username}\``).join(' | ') || 'Aktif yetkili yok.',
-        inline: false
-      },
-      {
-        name: `🟢 Online:`,
-        value: `${onlineCount}/${activeStaff.length}`,
-        inline: true
-      },
-      {
-        name: '💼 Son Güncelleme:',
-        value: `Bugün, saat ${format(new Date(), 'HH:mm')}`,
-        inline: true
-      }
-    )
     .setFooter({ text: `Görkemli Ticket Sistemi | Prefix: ${prefix} | by SeninBot` });
 
-  // Create buttons
+  // Create button for creating ticket
   const createTicketButton = new ButtonBuilder()
     .setCustomId('create_ticket')
     .setLabel('Ticket Oluştur')
     .setEmoji('📬')
     .setStyle(ButtonStyle.Primary);
 
-  const myTicketsButton = new ButtonBuilder()
-    .setCustomId('my_tickets')
-    .setLabel('Ticketlarım')
-    .setEmoji('🗂️')
-    .setStyle(ButtonStyle.Secondary);
-
-  const closeTicketButton = new ButtonBuilder()
-    .setCustomId('close_ticket')
-    .setLabel('Ticket Kapat')
-    .setEmoji('❌')
-    .setStyle(ButtonStyle.Danger);
-
-  // Add buttons to action row
+  // Add button to action row
   const row = new ActionRowBuilder<ButtonBuilder>()
-    .addComponents(createTicketButton, myTicketsButton, closeTicketButton);
+    .addComponents(createTicketButton);
 
   return { embed, row };
 }
