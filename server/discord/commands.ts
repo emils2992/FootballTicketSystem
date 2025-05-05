@@ -192,10 +192,47 @@ async function handleTicketButtonInteraction(interaction: ButtonInteraction) {
 // Show ticket category selection
 export async function setupSelectMenuInteraction(client: Client) {
   client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isStringSelectMenu()) return;
-    
-    if (interaction.customId === 'ticket_category') {
-      await handleCategorySelection(interaction);
+    try {
+      // Handle select menu interactions for ticket categories
+      if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === 'ticket_category') {
+          await handleCategorySelection(interaction);
+        } else if (interaction.customId === 'ticket_category_direct') {
+          await handleCategorySelection(interaction);
+        }
+      }
+      
+      // Handle modal submissions for tickets
+      if (interaction.isModalSubmit()) {
+        const customId = interaction.customId;
+        
+        // Regex to check if this is a ticket modal (both from panel and direct command)
+        if (customId.startsWith('ticket_modal_')) {
+          const categoryIdMatch = customId.match(/ticket_modal_(\d+)/);
+          if (categoryIdMatch && categoryIdMatch[1]) {
+            const categoryId = parseInt(categoryIdMatch[1]);
+            await handleTicketCreation(interaction, categoryId);
+          }
+        }
+        // Check for direct ticket creation (from .ticket command)
+        else if (customId.startsWith('ticket_modal_direct_')) {
+          const categoryIdMatch = customId.match(/ticket_modal_direct_(\d+)/);
+          if (categoryIdMatch && categoryIdMatch[1]) {
+            const categoryId = parseInt(categoryIdMatch[1]);
+            await handleTicketCreation(interaction, categoryId);
+          }
+        }
+        // Check for reply modals
+        else if (customId.startsWith('reply_modal_')) {
+          const ticketIdMatch = customId.match(/reply_modal_(\d+)/);
+          if (ticketIdMatch && ticketIdMatch[1]) {
+            const ticketId = parseInt(ticketIdMatch[1]);
+            await handleTicketReply(interaction, ticketId);
+          }
+        }
+      }
+    } catch (error) {
+      log(`Error handling interaction: ${error}`, 'discord');
     }
   });
 }
@@ -242,17 +279,9 @@ async function handleCategorySelection(interaction: StringSelectMenuInteraction)
     // Show modal
     await interaction.showModal(modal);
     
-    // Set up modal submit collector
-    const filter = (i: ModalSubmitInteraction) => 
-      i.customId === `ticket_modal_${categoryId}` && i.user.id === interaction.user.id;
-    
-    interaction.awaitModalSubmit({ filter, time: 60000 })
-      .then(async (modalInteraction) => {
-        await handleTicketCreation(modalInteraction, categoryId);
-      })
-      .catch((error) => {
-        log(`Error in modal submission: ${error}`, 'discord');
-      });
+    // We no longer need to wait for modal submission here
+    // Modal submissions are now handled in the main interactionCreate event handler
+    // This prevents orphaned modal submissions and ensures all modals are properly handled
     
   } catch (error) {
     log(`Error handling category selection: ${error}`, 'discord');
