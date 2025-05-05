@@ -1,11 +1,11 @@
 // index.js - Porsuk Ticket Bot - Tam Fonksiyonel Discord.js v13 Sürümü
-const { Client, Intents, MessageEmbed, MessageActionRow, MessageButton, MessageSelectMenu, Permissions, ChannelType, Modal, TextInputComponent } = require('discord.js');
+const { Client, Intents, MessageEmbed, MessageActionRow, MessageButton, MessageSelectMenu, Permissions, Collection, Modal, TextInputComponent } = require('discord.js');
 const { Pool } = require('pg');
 const express = require('express');
 const { format } = require('date-fns');
 const { tr } = require('date-fns/locale');
 
-// Glitch'i uyanık tutmak için Express sunucusu
+// Express server (Glitch'i uyanık tutmak için)
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -23,15 +23,14 @@ const pool = new Pool({
 });
 
 // Discord client
-const client = new Client({
+const client = new Client({ 
   intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.DirectMessages
+    Intents.FLAGS.GUILDS,
+    Intents.FLAGS.GUILD_MESSAGES,
+    Intents.FLAGS.GUILD_MEMBERS,
+    Intents.FLAGS.DIRECT_MESSAGES
   ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction]
+  partials: ['MESSAGE', 'CHANNEL', 'REACTION']
 });
 
 // Bot prefix
@@ -357,31 +356,31 @@ async function createTicketPanelEmbed(guildId) {
   const prefix = settings?.prefix || '.';
   
   // Create the embed
-  const embed = new EmbedBuilder()
-    .setColor(0x5865F2) // Discord blurple color
+  const embed = new MessageEmbed()
+    .setColor('#5865F2') // Discord blurple color
     .setTitle('🎟️ Futbol RP Ticket Paneli')
     .setDescription(
       'Bir sorun, talep veya delikanlı gibi açıklaman mı var?\n\n' +
       '👇 Aşağıdaki seçeneklerle bir ticket oluşturabilirsin.'
     )
     .setImage('https://i.imgur.com/U78xRjt.png')
-    .setFooter({ text: `Görkemli Ticket Sistemi | Prefix: ${prefix} | by Porsuk Support` });
+    .setFooter(`Görkemli Ticket Sistemi | Prefix: ${prefix} | by Porsuk Support`);
 
   // Create buttons
-  const createTicketButton = new ButtonBuilder()
+  const createTicketButton = new MessageButton()
     .setCustomId('create_ticket')
     .setLabel('Ticket Oluştur')
     .setEmoji('📬')
-    .setStyle(ButtonStyle.Primary);
+    .setStyle('PRIMARY');
   
-  const myTicketsButton = new ButtonBuilder()
+  const myTicketsButton = new MessageButton()
     .setCustomId('my_tickets')
     .setLabel('Ticketlarım')
     .setEmoji('📋')
-    .setStyle(ButtonStyle.Secondary);
+    .setStyle('SECONDARY');
 
   // Add buttons to row
-  const row = new ActionRowBuilder().addComponents(createTicketButton, myTicketsButton);
+  const row = new MessageActionRow().addComponents(createTicketButton, myTicketsButton);
 
   return { embed, row };
 }
@@ -391,32 +390,14 @@ async function createNewTicketEmbed(ticket) {
   const activeStaff = await storage.getActiveStaffMembers();
   
   // Create the embed
-  const embed = new EmbedBuilder()
-    .setColor(0x5865F2)
+  const embed = new MessageEmbed()
+    .setColor('#5865F2')
     .setTitle('🎫 Yeni Ticket')
     .setThumbnail('https://i.imgur.com/pgTRpDd.png')
-    .addFields(
-      {
-        name: '👤 Açan:',
-        value: `@${ticket.user_username || 'Bilinmeyen Kullanıcı'}`,
-        inline: false
-      },
-      {
-        name: '📂 Kategori:',
-        value: `${ticket.category_emoji || '📌'} ${ticket.category_name || 'Genel Kategori'}`,
-        inline: false
-      },
-      {
-        name: '📝 Açıklama:',
-        value: `"${ticket.description}"`,
-        inline: false
-      },
-      {
-        name: '📆 Açılış:',
-        value: formatDate(ticket.created_at),
-        inline: false
-      }
-    )
+    .addField('👤 Açan:', `@${ticket.user_username || 'Bilinmeyen Kullanıcı'}`, false)
+    .addField('📂 Kategori:', `${ticket.category_emoji || '📌'} ${ticket.category_name || 'Genel Kategori'}`, false)
+    .addField('📝 Açıklama:', `"${ticket.description}"`, false)
+    .addField('📆 Açılış:', formatDate(ticket.created_at), false)
     .setImage('https://i.imgur.com/pgTRpDd.png');
 
   // Add staff section
@@ -427,54 +408,42 @@ async function createNewTicketEmbed(ticket) {
       const staffList = validStaff.map(staff => `• <@${staff.discord_id}>`).join('\n');
       const staffCount = validStaff.length;
       
-      embed.addFields({
-        name: `👮‍♂️ Yetkili Ekibi (${staffCount} Aktif Yetkili):`,
-        value: staffList,
-        inline: false
-      });
+      embed.addField(`👮‍♂️ Yetkili Ekibi (${staffCount} Aktif Yetkili):`, staffList, false);
     } else {
-      embed.addFields({
-        name: '👮‍♂️ Yetkili Ekibi:',
-        value: 'Yetkililer yakında size yardımcı olacaklar.',
-        inline: false
-      });
+      embed.addField('👮‍♂️ Yetkili Ekibi:', 'Yetkililer yakında size yardımcı olacaklar.', false);
     }
   } else {
-    embed.addFields({
-      name: '👮‍♂️ Yetkili Ekibi:',
-      value: 'Yetkililer yakında size yardımcı olacaklar.',
-      inline: false
-    });
+    embed.addField('👮‍♂️ Yetkili Ekibi:', 'Yetkililer yakında size yardımcı olacaklar.', false);
   }
 
   // Create buttons
-  const replyButton = new ButtonBuilder()
+  const replyButton = new MessageButton()
     .setCustomId('reply_ticket')
     .setLabel('Yanıtla')
     .setEmoji('💬')
-    .setStyle(ButtonStyle.Primary);
+    .setStyle('PRIMARY');
   
-  const acceptButton = new ButtonBuilder()
+  const acceptButton = new MessageButton()
     .setCustomId('accept_ticket')
     .setLabel('Kabul Et')
     .setEmoji('✅')
-    .setStyle(ButtonStyle.Success);
+    .setStyle('SUCCESS');
   
-  const rejectButton = new ButtonBuilder()
+  const rejectButton = new MessageButton()
     .setCustomId('reject_ticket')
     .setLabel('Reddet')
     .setEmoji('⛔')
-    .setStyle(ButtonStyle.Danger);
+    .setStyle('DANGER');
   
-  const closeButton = new ButtonBuilder()
+  const closeButton = new MessageButton()
     .setCustomId('close_ticket')
     .setLabel('Kapat')
     .setEmoji('❌')
-    .setStyle(ButtonStyle.Secondary);
+    .setStyle('SECONDARY');
 
   // Create rows for buttons
-  const row1 = new ActionRowBuilder().addComponents(acceptButton, rejectButton);
-  const row2 = new ActionRowBuilder().addComponents(replyButton, closeButton);
+  const row1 = new MessageActionRow().addComponents(acceptButton, rejectButton);
+  const row2 = new MessageActionRow().addComponents(replyButton, closeButton);
   
   // Combine the rows
   const rows = [row1, row2];
@@ -484,8 +453,8 @@ async function createNewTicketEmbed(ticket) {
 
 function createTicketListEmbed(tickets) {
   // Create the embed
-  const embed = new EmbedBuilder()
-    .setColor(0x5865F2)
+  const embed = new MessageEmbed()
+    .setColor('#5865F2')
     .setTitle('📋 Ticketlarım');
   
   if (tickets.length === 0) {
@@ -524,7 +493,7 @@ function createTicketListEmbed(tickets) {
     embed.setDescription(description);
   }
   
-  embed.setFooter({ text: 'Açık ticketlara tıklayarak gidebilirsiniz' });
+  embed.setFooter('Açık ticketlara tıklayarak gidebilirsiniz');
   
   return embed;
 }
@@ -532,13 +501,13 @@ function createTicketListEmbed(tickets) {
 // Command handlers
 async function handleTicketKurCommand(message) {
   // Check if user has admin permissions
-  if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+  if (!message.member.permissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
     return message.reply('Bu komutu kullanabilmek için yönetici yetkisine sahip olmalısın delikanlı.');
   }
   
   try {
     const { embed, row } = await createTicketPanelEmbed(message.guild.id);
-    const sentMessage = await message.channel.send({ embeds: [embed], components: [row] });
+    await message.channel.send({ embeds: [embed], components: [row] });
     
     message.reply('✅ Ticket paneli başarıyla oluşturuldu!');
   } catch (error) {
@@ -556,7 +525,8 @@ async function handleTicketCommand(message) {
       return message.reply('Henüz hiç ticket kategorisi yapılandırılmamış.');
     }
     
-    const selectMenu = new StringSelectMenuBuilder()
+    // SelectMenu oluştur
+    const selectMenu = new MessageSelectMenu()
       .setCustomId('ticket_category')
       .setPlaceholder('Bir kategori seçin...');
     
@@ -569,7 +539,7 @@ async function handleTicketCommand(message) {
       });
     });
     
-    const row = new ActionRowBuilder().addComponents(selectMenu);
+    const row = new MessageActionRow().addComponents(selectMenu);
     
     const response = await message.reply({
       content: 'Lütfen ticket için bir kategori seçin:',
@@ -589,43 +559,43 @@ async function handleTicketCommand(message) {
       
       const categoryId = parseInt(categorySelection.values[0]);
       
-      // Modal oluştur
-      const modal = new ModalBuilder()
-        .setCustomId(`ticket_modal_${categoryId}`)
-        .setTitle('Ticket Oluştur');
+      // Discord.js v13'te Modallar doğrudan yok, bunun yerine soru-cevap ile ilerliyoruz
+      // Kullanıcıdan açıklama iste
+      const followUp = await message.channel.send({
+        content: `<@${message.author.id}>, lütfen ticket açıklamanızı yazın:`
+      });
       
-      const ticketDescription = new TextInputBuilder()
-        .setCustomId('ticket_description')
-        .setLabel('Açıklama')
-        .setPlaceholder('Ticket hakkında detayları buraya yazın...')
-        .setRequired(true)
-        .setMinLength(1)
-        .setMaxLength(1000)
-        .setStyle(TextInputStyle.Paragraph);
-      
-      const firstRow = new ActionRowBuilder().addComponents(ticketDescription);
-      
-      modal.addComponents(firstRow);
-      
-      await categorySelection.showModal(modal);
-      
-      // Modal submit olayını bekle
-      const filter = i => i.customId === `ticket_modal_${categoryId}` && i.user.id === message.author.id;
+      // Açıklama bekleme filtresi
+      const messageFilter = m => m.author.id === message.author.id && m.channelId === message.channel.id;
       
       try {
-        const modalSubmit = await categorySelection.awaitModalSubmit({ filter, time: 120000 });
+        const collected = await message.channel.awaitMessages({
+          filter: messageFilter,
+          max: 1,
+          time: 120000,
+          errors: ['time']
+        });
         
-        await handleTicketCreation(modalSubmit, categoryId);
+        const description = collected.first().content;
+        
+        // Ticket oluştur
+        await handleTicketCreation(message, categoryId, description);
+        
+        // Temizlik
+        if (followUp.deletable) await followUp.delete().catch(() => {});
+        if (collected.first().deletable) await collected.first().delete().catch(() => {});
+        
       } catch (error) {
-        console.error('Error waiting for modal submission:', error);
-        if (error.name === 'Error' && error.message.includes('time')) {
-          await message.followUp({ content: 'Ticket oluşturma süresi doldu.', ephemeral: true });
+        if (error.code === 'TIME') {
+          message.channel.send('Ticket açıklaması için süre doldu. Lütfen tekrar deneyin.');
+        } else {
+          console.error('Error collecting message:', error);
         }
       }
     } catch (error) {
       console.error('Error awaiting category selection:', error);
-      if (error.name === 'Error' && error.message.includes('time')) {
-        await message.followUp({ content: 'Kategori seçimi zaman aşımına uğradı.', ephemeral: true });
+      if (error.code === 'TIME') {
+        message.channel.send('Kategori seçimi için süre doldu. Lütfen tekrar deneyin.');
       }
     }
   } catch (error) {
@@ -634,13 +604,10 @@ async function handleTicketCommand(message) {
   }
 }
 
-async function handleTicketCreation(modalInteraction, categoryId) {
+async function handleTicketCreation(message, categoryId, description) {
   try {
-    await modalInteraction.deferReply({ ephemeral: true });
-    
-    const description = modalInteraction.fields.getTextInputValue('ticket_description');
-    const user = modalInteraction.user;
-    const guild = modalInteraction.guild;
+    const user = message.author;
+    const guild = message.guild;
     
     // Kullanıcıyı veritabanında oluştur veya güncelle
     const userData = {
@@ -652,14 +619,14 @@ async function handleTicketCreation(modalInteraction, categoryId) {
     const dbUser = await storage.createOrUpdateUser(userData);
     
     if (!dbUser) {
-      return modalInteraction.followUp({ content: 'Kullanıcı bilgileri kaydedilemedi.', ephemeral: true });
+      return message.reply('Kullanıcı bilgileri kaydedilemedi.');
     }
     
     // Kategoriyi kontrol et
     const category = await storage.getCategoryById(categoryId);
     
     if (!category) {
-      return modalInteraction.followUp({ content: 'Seçilen kategori bulunamadı.', ephemeral: true });
+      return message.reply('Seçilen kategori bulunamadı.');
     }
     
     // Ticket numarasını al
@@ -669,30 +636,28 @@ async function handleTicketCreation(modalInteraction, categoryId) {
     const channelName = `ticket-${ticketNumber}`;
     
     try {
-      // Staff rolünü al (bot ayarlarından veya sabit bir ID ile)
-      // NOT: Bu değeri kendi sunucunuza göre değiştirin
-      const staffRoleId = '123456789012345678'; // Gerçek bir rol ID'si ile değiştir
+      // Rol ID'sinin doğru olduğundan emin olun - bu sunucunuzdaki staff rolünün ID'si olmalı
+      const staffRoleId = '123456789012345678'; // Bu ID'yi değiştirin!
       
-      // Kanal oluştur ve izinleri ayarla
-      const ticketChannel = await guild.channels.create({
-        name: channelName,
-        type: ChannelType.GuildText,
+      // Kanal oluştur
+      const ticketChannel = await guild.channels.create(channelName, {
+        type: 'GUILD_TEXT',
         permissionOverwrites: [
           {
             id: guild.id, // @everyone
-            deny: [PermissionFlagsBits.ViewChannel]
+            deny: ['VIEW_CHANNEL']
           },
           {
-            id: user.id, // Ticket oluşturan
-            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory]
+            id: user.id, // Ticket oluşturan kullanıcı
+            allow: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'READ_MESSAGE_HISTORY']
           },
           {
             id: staffRoleId, // Staff rolü
-            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory]
+            allow: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'READ_MESSAGE_HISTORY']
           },
           {
             id: client.user.id, // Bot kendisi
-            allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory]
+            allow: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'READ_MESSAGE_HISTORY']
           }
         ]
       });
@@ -708,10 +673,10 @@ async function handleTicketCreation(modalInteraction, categoryId) {
       const ticket = await storage.createTicket(ticketData);
       
       if (!ticket) {
-        return modalInteraction.followUp({ content: 'Ticket veritabanına kaydedilemedi.', ephemeral: true });
+        return message.reply('Ticket veritabanına kaydedilemedi.');
       }
       
-      // Ticket channel mesajını oluştur
+      // Ticket bilgisi oluştur
       const ticketInfo = {
         id: ticket.id,
         category_name: category.name,
@@ -721,24 +686,26 @@ async function handleTicketCreation(modalInteraction, categoryId) {
         created_at: ticket.created_at
       };
       
+      // Ticket embed ve butonlarını oluştur
       const { embed, rows } = await createNewTicketEmbed(ticketInfo);
       
-      // Staff rolünü etiketle
-      await ticketChannel.send({ content: `<@&${staffRoleId}> Yeni bir ticket oluşturuldu!`, embeds: [embed], components: rows });
+      // Yetkili rolünü etiketle ve mesajı gönder
+      await ticketChannel.send({ 
+        content: `<@&${staffRoleId}> Yeni bir ticket oluşturuldu!`, 
+        embeds: [embed], 
+        components: rows 
+      });
       
-      await modalInteraction.followUp({ content: `✅ Ticket başarıyla oluşturuldu! <#${ticketChannel.id}>`, ephemeral: true });
+      // Kullanıcıya bilgi ver
+      await message.reply(`✅ Ticket başarıyla oluşturuldu! <#${ticketChannel.id}>`);
       
     } catch (error) {
       console.error('Error creating ticket channel:', error);
-      await modalInteraction.followUp({ content: 'Ticket kanalı oluşturulurken bir hata oluştu.', ephemeral: true });
+      await message.reply('Ticket kanalı oluşturulurken bir hata oluştu.');
     }
   } catch (error) {
     console.error('Error in ticket creation:', error);
-    if (!modalInteraction.replied && !modalInteraction.deferred) {
-      await modalInteraction.reply({ content: 'Ticket oluşturulurken bir hata oluştu.', ephemeral: true });
-    } else {
-      await modalInteraction.followUp({ content: 'Ticket oluşturulurken bir hata oluştu.', ephemeral: true });
-    }
+    await message.reply('Ticket oluşturulurken bir hata oluştu.');
   }
 }
 
@@ -766,42 +733,19 @@ async function handleTicketlarimCommand(message) {
 
 async function handleHelpCommand(message) {
   try {
-    // Prefix'i al (bot ayarlarından)
+    // Prefix'i al (bot ayarlarından veya varsayılan)
     const settings = await storage.getBotSettings(message.guild.id);
     const prefix = settings?.prefix || '.';
     
-    const embed = new EmbedBuilder()
-      .setColor(0x5865F2)
+    const embed = new MessageEmbed()
+      .setColor('#5865F2')
       .setTitle('Porsuk Support Bot Komutları')
       .setDescription(`Aşağıdaki komutları ${prefix} önekiyle kullanabilirsiniz.`)
-      .addFields(
-        {
-          name: `${prefix}ticketkur`,
-          value: 'Ticket sistemini kur ve paneli gönder (Sadece yöneticiler)',
-          inline: false
-        },
-        {
-          name: `${prefix}ticketkurpaneli`,
-          value: 'Sadece ticket panelini gönder (Sadece yöneticiler)',
-          inline: false
-        },
-        {
-          name: `${prefix}ticket`,
-          value: 'Yeni bir ticket oluştur',
-          inline: false
-        },
-        {
-          name: `${prefix}ticketlarım`,
-          value: 'Oluşturduğunuz ticketları listele',
-          inline: false
-        },
-        {
-          name: `${prefix}help`,
-          value: 'Bu yardım mesajını göster',
-          inline: false
-        }
-      )
-      .setFooter({ text: 'Porsuk Support Ticket Sistemi' });
+      .addField(`${prefix}ticketkur`, 'Ticket sistemini kur ve paneli gönder (Sadece yöneticiler)', false)
+      .addField(`${prefix}ticket`, 'Yeni bir ticket oluştur', false)
+      .addField(`${prefix}ticketlarım`, 'Oluşturduğunuz ticketları listele', false)
+      .addField(`${prefix}help`, 'Bu yardım mesajını göster', false)
+      .setFooter('Porsuk Support Ticket Sistemi');
     
     message.reply({ embeds: [embed] });
   } catch (error) {
@@ -810,7 +754,7 @@ async function handleHelpCommand(message) {
   }
 }
 
-// Button Interactions
+// Button interaction handlers
 async function acceptTicket(interaction) {
   try {
     await interaction.deferReply();
@@ -844,20 +788,13 @@ async function acceptTicket(interaction) {
       const ticketUser = await client.users.fetch(ticketInfo.user_discord_id);
       
       if (ticketUser) {
-        const dmEmbed = new EmbedBuilder()
-          .setColor(0x57F287) // Discord green
+        const dmEmbed = new MessageEmbed()
+          .setColor('#57F287') // Discord green
           .setTitle('✅ Ticketınız Kabul Edildi')
           .setDescription(`"${ticketInfo.description}" açıklamalı ticketınız yetkili tarafından kabul edildi.`)
-          .addFields({
-            name: '📂 Kategori:',
-            value: `${ticketInfo.category_emoji || '📌'} ${ticketInfo.category_name || 'Genel Kategori'}`,
-            inline: false
-          }, {
-            name: '👮‍♂️ İlgilenen Yetkili:',
-            value: `@${interaction.user.username}`,
-            inline: false
-          })
-          .setFooter({ text: `Ticket ID: ${ticketInfo.id}` })
+          .addField('📂 Kategori:', `${ticketInfo.category_emoji || '📌'} ${ticketInfo.category_name || 'Genel Kategori'}`, false)
+          .addField('👮‍♂️ İlgilenen Yetkili:', `@${interaction.user.username}`, false)
+          .setFooter(`Ticket ID: ${ticketInfo.id}`)
           .setTimestamp();
         
         await ticketUser.send({ embeds: [dmEmbed] });
@@ -881,69 +818,47 @@ async function acceptTicket(interaction) {
 
 async function rejectTicket(interaction) {
   try {
-    // Modal göster
-    const modal = new ModalBuilder()
-      .setCustomId('reject_ticket_modal')
-      .setTitle('Ticket Reddetme Nedeni');
+    // v13'te kullanıcıdan red nedeni isteyeceğiz
+    await interaction.reply({ 
+      content: 'Lütfen reddetme nedeninizi yazın:', 
+      ephemeral: true 
+    });
     
-    const rejectReason = new TextInputBuilder()
-      .setCustomId('reject_reason')
-      .setLabel('Red Nedeni')
-      .setPlaceholder('Ticketı reddetme nedeninizi belirtin...')
-      .setRequired(true)
-      .setMinLength(1)
-      .setMaxLength(1000)
-      .setStyle(TextInputStyle.Paragraph);
-    
-    const firstRow = new ActionRowBuilder().addComponents(rejectReason);
-    
-    modal.addComponents(firstRow);
-    
-    await interaction.showModal(modal);
-    
-    // Modal submit olayını bekle
-    const filter = i => i.customId === 'reject_ticket_modal' && i.user.id === interaction.user.id;
+    const filter = m => m.author.id === interaction.user.id && m.channelId === interaction.channel.id;
     
     try {
-      const modalSubmit = await interaction.awaitModalSubmit({ filter, time: 120000 });
+      const collected = await interaction.channel.awaitMessages({
+        filter,
+        max: 1,
+        time: 60000,
+        errors: ['time']
+      });
       
-      await modalSubmit.deferReply();
-      
-      const rejectReasonText = modalSubmit.fields.getTextInputValue('reject_reason');
+      const rejectReason = collected.first().content;
       
       // Ticket'ı bul
       const ticketInfo = await storage.getTicketByChannelId(interaction.channel.id);
       
       if (!ticketInfo) {
-        return modalSubmit.followUp({ content: 'Ticket bilgisi bulunamadı.' });
+        return interaction.followUp({ content: 'Ticket bilgisi bulunamadı.' });
       }
       
       // Ticket'ı reddet
-      await storage.rejectTicket(ticketInfo.id, rejectReasonText);
+      await storage.rejectTicket(ticketInfo.id, rejectReason);
       
       // Kullanıcıya DM gönder
       try {
         const ticketUser = await client.users.fetch(ticketInfo.user_discord_id);
         
         if (ticketUser) {
-          const dmEmbed = new EmbedBuilder()
-            .setColor(0xED4245) // Discord red
+          const dmEmbed = new MessageEmbed()
+            .setColor('#ED4245') // Discord red
             .setTitle('❌ Ticketınız Reddedildi')
             .setDescription(`"${ticketInfo.description}" açıklamalı ticketınız yetkili tarafından reddedildi.`)
-            .addFields({
-              name: '📂 Kategori:',
-              value: `${ticketInfo.category_emoji || '📌'} ${ticketInfo.category_name || 'Genel Kategori'}`,
-              inline: false
-            }, {
-              name: '⛔ Red Nedeni:',
-              value: rejectReasonText,
-              inline: false
-            }, {
-              name: '👮‍♂️ Reddeden Yetkili:',
-              value: `@${interaction.user.username}`,
-              inline: false
-            })
-            .setFooter({ text: `Ticket ID: ${ticketInfo.id}` })
+            .addField('📂 Kategori:', `${ticketInfo.category_emoji || '📌'} ${ticketInfo.category_name || 'Genel Kategori'}`, false)
+            .addField('⛔ Red Nedeni:', rejectReason, false)
+            .addField('👮‍♂️ Reddeden Yetkili:', `@${interaction.user.username}`, false)
+            .setFooter(`Ticket ID: ${ticketInfo.id}`)
             .setTimestamp();
           
           await ticketUser.send({ embeds: [dmEmbed] });
@@ -954,17 +869,24 @@ async function rejectTicket(interaction) {
       }
       
       // Kanala bildirimde bulun
-      await modalSubmit.followUp({ content: `❌ Ticket <@${interaction.user.id}> tarafından reddedildi. <@${ticketInfo.user_discord_id}> bilgilendirildi.` });
+      await interaction.followUp({ content: `❌ Ticket <@${interaction.user.id}> tarafından reddedildi. <@${ticketInfo.user_discord_id}> bilgilendirildi.` });
+      
+      // Temizlik
+      if (collected.first().deletable) await collected.first().delete().catch(() => {});
       
     } catch (error) {
-      console.error('Error awaiting modal submission:', error);
-      if (error.name === 'Error' && error.message.includes('time')) {
-        await interaction.followUp({ content: 'Red nedeni girme süresi doldu.', ephemeral: true });
+      console.error('Error awaiting reject reason:', error);
+      if (error.code === 'TIME') {
+        await interaction.followUp({ content: 'Red nedeni için süre doldu. İşlem iptal edildi.', ephemeral: true });
       }
     }
   } catch (error) {
     console.error('Error rejecting ticket:', error);
-    await interaction.reply({ content: 'Ticket reddedilirken bir hata oluştu.', ephemeral: true });
+    if (!interaction.replied) {
+      await interaction.reply({ content: 'Ticket reddedilirken bir hata oluştu.' });
+    } else {
+      await interaction.followUp({ content: 'Ticket reddedilirken bir hata oluştu.' });
+    }
   }
 }
 
@@ -988,9 +910,9 @@ async function closeTicket(interaction) {
     // Kanalı arşivle (5 saniye bekle)
     setTimeout(async () => {
       try {
-        await interaction.channel.send('Bu ticket kapatıldı ve birazdan arşivlenecek.');
+        await interaction.channel.send('Bu ticket kapatıldı ve birazdan silinecek.');
         
-        // Kanalı arşivle veya sil
+        // 5 saniye sonra kanalı sil
         setTimeout(async () => {
           try {
             await interaction.channel.delete();
@@ -1014,41 +936,28 @@ async function closeTicket(interaction) {
 
 async function replyToTicket(interaction) {
   try {
-    // Modal göster
-    const modal = new ModalBuilder()
-      .setCustomId('reply_ticket_modal')
-      .setTitle('Ticketa Yanıt Ver');
+    await interaction.reply({ 
+      content: 'Lütfen yanıtınızı yazın:', 
+      ephemeral: true 
+    });
     
-    const replyContent = new TextInputBuilder()
-      .setCustomId('reply_content')
-      .setLabel('Yanıt')
-      .setPlaceholder('Yanıtınızı buraya yazın...')
-      .setRequired(true)
-      .setMinLength(1)
-      .setMaxLength(1000)
-      .setStyle(TextInputStyle.Paragraph);
-    
-    const firstRow = new ActionRowBuilder().addComponents(replyContent);
-    
-    modal.addComponents(firstRow);
-    
-    await interaction.showModal(modal);
-    
-    // Modal submit olayını bekle
-    const filter = i => i.customId === 'reply_ticket_modal' && i.user.id === interaction.user.id;
+    const filter = m => m.author.id === interaction.user.id && m.channelId === interaction.channel.id;
     
     try {
-      const modalSubmit = await interaction.awaitModalSubmit({ filter, time: 120000 });
+      const collected = await interaction.channel.awaitMessages({
+        filter,
+        max: 1,
+        time: 60000,
+        errors: ['time']
+      });
       
-      await modalSubmit.deferReply();
-      
-      const replyText = modalSubmit.fields.getTextInputValue('reply_content');
+      const replyText = collected.first().content;
       
       // Ticket'ı bul
       const ticketInfo = await storage.getTicketByChannelId(interaction.channel.id);
       
       if (!ticketInfo) {
-        return modalSubmit.followUp({ content: 'Ticket bilgisi bulunamadı.' });
+        return interaction.followUp({ content: 'Ticket bilgisi bulunamadı.' });
       }
       
       // Kullanıcıyı veritabanında oluştur veya güncelle
@@ -1061,7 +970,7 @@ async function replyToTicket(interaction) {
       const dbUser = await storage.createOrUpdateUser(userData);
       
       if (!dbUser) {
-        return modalSubmit.followUp({ content: 'Kullanıcı bilgileri kaydedilemedi.' });
+        return interaction.followUp({ content: 'Kullanıcı bilgileri kaydedilemedi.' });
       }
       
       // Yanıtı kaydet
@@ -1074,17 +983,14 @@ async function replyToTicket(interaction) {
       await storage.addResponse(responseData);
       
       // Yanıt embed'i oluştur
-      const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setAuthor({
-          name: interaction.user.username,
-          iconURL: interaction.user.displayAvatarURL()
-        })
+      const embed = new MessageEmbed()
+        .setColor('#5865F2')
+        .setAuthor(interaction.user.username, interaction.user.displayAvatarURL())
         .setDescription(replyText)
         .setTimestamp();
       
       // Kanala bildirimde bulun
-      await modalSubmit.followUp({ embeds: [embed] });
+      await interaction.channel.send({ embeds: [embed] });
       
       // Ticket sahibine DM gönder (eğer yanıt veren kişi ticket sahibi değilse)
       if (interaction.user.id !== ticketInfo.user_discord_id) {
@@ -1092,20 +998,13 @@ async function replyToTicket(interaction) {
           const ticketUser = await client.users.fetch(ticketInfo.user_discord_id);
           
           if (ticketUser) {
-            const dmEmbed = new EmbedBuilder()
-              .setColor(0x5865F2)
+            const dmEmbed = new MessageEmbed()
+              .setColor('#5865F2')
               .setTitle('💬 Ticketınıza Yanıt Geldi')
               .setDescription(`"${ticketInfo.description}" açıklamalı ticketınıza yanıt geldi.`)
-              .addFields({
-                name: '👤 Yanıtlayan:',
-                value: `@${interaction.user.username}`,
-                inline: false
-              }, {
-                name: '📝 Yanıt:',
-                value: replyText,
-                inline: false
-              })
-              .setFooter({ text: `Ticket ID: ${ticketInfo.id}` })
+              .addField('👤 Yanıtlayan:', `@${interaction.user.username}`, false)
+              .addField('📝 Yanıt:', replyText, false)
+              .setFooter(`Ticket ID: ${ticketInfo.id}`)
               .setTimestamp();
             
             await ticketUser.send({ embeds: [dmEmbed] });
@@ -1115,15 +1014,24 @@ async function replyToTicket(interaction) {
           // DM gönderilmezse kanalda devam et
         }
       }
+      
+      // Temizlik
+      await interaction.followUp({ content: 'Yanıtınız başarıyla gönderildi!', ephemeral: true });
+      if (collected.first().deletable) await collected.first().delete().catch(() => {});
+      
     } catch (error) {
-      console.error('Error awaiting modal submission:', error);
-      if (error.name === 'Error' && error.message.includes('time')) {
-        await interaction.followUp({ content: 'Yanıt verme süresi doldu.', ephemeral: true });
+      console.error('Error awaiting reply:', error);
+      if (error.code === 'TIME') {
+        await interaction.followUp({ content: 'Yanıt için süre doldu. İşlem iptal edildi.', ephemeral: true });
       }
     }
   } catch (error) {
     console.error('Error replying to ticket:', error);
-    await interaction.reply({ content: 'Yanıt gönderilirken bir hata oluştu.', ephemeral: true });
+    if (!interaction.replied) {
+      await interaction.reply({ content: 'Yanıt gönderilirken bir hata oluştu.', ephemeral: true });
+    } else {
+      await interaction.followUp({ content: 'Yanıt gönderilirken bir hata oluştu.', ephemeral: true });
+    }
   }
 }
 
@@ -1135,6 +1043,8 @@ client.on('messageCreate', async (message) => {
   // Komutu ve argümanları ayır
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const command = args.shift().toLowerCase();
+  
+  console.log(`Command received: ${command} by ${message.author.tag}`);
   
   // Komutları işle
   if (command === 'ping') {
@@ -1152,6 +1062,8 @@ client.on('messageCreate', async (message) => {
 
 client.on('interactionCreate', async (interaction) => {
   try {
+    console.log(`Interaction received: ${interaction.customId} by ${interaction.user.tag}`);
+    
     // Buton etkileşimlerini işle
     if (interaction.isButton()) {
       if (interaction.customId === 'create_ticket') {
@@ -1162,7 +1074,7 @@ client.on('interactionCreate', async (interaction) => {
           return interaction.reply({ content: 'Henüz hiç ticket kategorisi yapılandırılmamış.', ephemeral: true });
         }
         
-        const selectMenu = new StringSelectMenuBuilder()
+        const selectMenu = new MessageSelectMenu()
           .setCustomId('ticket_category')
           .setPlaceholder('Bir kategori seçin...');
         
@@ -1175,7 +1087,7 @@ client.on('interactionCreate', async (interaction) => {
           });
         });
         
-        const row = new ActionRowBuilder().addComponents(selectMenu);
+        const row = new MessageActionRow().addComponents(selectMenu);
         
         await interaction.reply({
           content: 'Lütfen ticket için bir kategori seçin:',
@@ -1206,39 +1118,73 @@ client.on('interactionCreate', async (interaction) => {
     }
     
     // Select menu etkileşimlerini işle
-    if (interaction.isStringSelectMenu()) {
+    if (interaction.isSelectMenu()) {
       if (interaction.customId === 'ticket_category') {
-        await interaction.deferUpdate();
-        
         const categoryId = parseInt(interaction.values[0]);
         
-        // Modal oluştur
-        const modal = new ModalBuilder()
-          .setCustomId(`ticket_modal_${categoryId}`)
-          .setTitle('Ticket Oluştur');
+        await interaction.update({ 
+          content: 'Lütfen bir açıklama yazın:',
+          components: [],
+          ephemeral: true 
+        });
         
-        const ticketDescription = new TextInputBuilder()
-          .setCustomId('ticket_description')
-          .setLabel('Açıklama')
-          .setPlaceholder('Ticket hakkında detayları buraya yazın...')
-          .setRequired(true)
-          .setMinLength(1)
-          .setMaxLength(1000)
-          .setStyle(TextInputStyle.Paragraph);
+        // Kullanıcıdan açıklama bekle
+        const filter = m => m.author.id === interaction.user.id && m.channel.id === interaction.channel.id;
+        const channel = await client.channels.fetch(interaction.channel.id);
         
-        const firstRow = new ActionRowBuilder().addComponents(ticketDescription);
-        
-        modal.addComponents(firstRow);
-        
-        await interaction.showModal(modal);
-      }
-    }
-    
-    // Modal etkileşimlerini işle
-    if (interaction.isModalSubmit()) {
-      if (interaction.customId.startsWith('ticket_modal_')) {
-        const categoryId = parseInt(interaction.customId.replace('ticket_modal_', ''));
-        await handleTicketCreation(interaction, categoryId);
+        try {
+          // Kullanıcıya DM gönder ve cevap iste
+          await interaction.user.send('Lütfen ticket açıklamanızı yazın:');
+          
+          const dmFilter = m => m.author.id === interaction.user.id && m.channel.type === 'DM';
+          
+          const dmCollected = await interaction.user.dmChannel.awaitMessages({
+            filter: dmFilter,
+            max: 1,
+            time: 120000,
+            errors: ['time']
+          });
+          
+          const description = dmCollected.first().content;
+          
+          // Ticket oluştur (mevcut kanaldan mesaj gönder)
+          const message = await channel.messages.fetch(interaction.message.id);
+          await handleTicketCreation(message, categoryId, description);
+          
+        } catch (error) {
+          console.error('Error awaiting DM:', error);
+          
+          // DM başarısız olduysa, kanalda devam et
+          try {
+            await channel.send({
+              content: `<@${interaction.user.id}>, lütfen ticket açıklamanızı kanalda yazın:`,
+              ephemeral: false
+            });
+            
+            const channelCollected = await channel.awaitMessages({
+              filter,
+              max: 1,
+              time: 120000,
+              errors: ['time']
+            });
+            
+            const description = channelCollected.first().content;
+            
+            // Ticket oluştur
+            const message = await channel.messages.fetch(interaction.message.id);
+            await handleTicketCreation(message, categoryId, description);
+            
+            // Temizlik
+            if (channelCollected.first().deletable) await channelCollected.first().delete().catch(() => {});
+            
+          } catch (channelError) {
+            console.error('Error awaiting channel messages:', channelError);
+            await channel.send({
+              content: `<@${interaction.user.id}>, ticket oluşturma işlemi zaman aşımına uğradı. Lütfen tekrar deneyin.`,
+              ephemeral: false
+            });
+          }
+        }
       }
     }
   } catch (error) {
@@ -1276,8 +1222,6 @@ client.on('warn', (warning) => {
 });
 
 // Discord botunu başlat
-const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-
-client.login(DISCORD_TOKEN).catch(err => {
+client.login(process.env.DISCORD_TOKEN).catch(err => {
   console.error('Bot login error:', err);
 });
