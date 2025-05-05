@@ -439,6 +439,7 @@ async function handleTicketCommand(message: Message) {
       emoji: category.emoji
     }));
     
+    // Create a proper SelectMenu that works with Discord.js
     const selectMenu = {
       type: 3, // StringSelectMenu type
       custom_id: 'ticket_category_direct',
@@ -446,8 +447,11 @@ async function handleTicketCommand(message: Message) {
       options: options
     };
     
-    const row = new ActionRowBuilder()
-      .addComponents(selectMenu);
+    // Create a proper ActionRow that works with Discord.js
+    const row = {
+      type: 1, // ActionRow type
+      components: [selectMenu]
+    };
     
     // Send the message with the menu
     await message.reply({
@@ -661,7 +665,7 @@ async function handleHelpCommand(message: Message, prefix: string) {
         }
       ],
       footer: {
-        text: `Görkemli Ticket Sistemi | Prefix: ${prefix} | by SeninBot`
+        text: `Görkemli Ticket Sistemi | Prefix: ${prefix} | by Porsuk Support`
       }
     };
     

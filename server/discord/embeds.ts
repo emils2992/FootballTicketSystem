@@ -35,18 +35,22 @@ export async function createTicketPanelEmbed(guildId: string) {
       'Bir sorun, talep veya delikanlı gibi açıklaman mı var?\n\n' +
       '👇 Aşağıdaki seçeneklerle bir ticket oluşturabilirsin.'
     )
-    .setFooter({ text: `Görkemli Ticket Sistemi | Prefix: ${prefix} | by SeninBot` });
+    .setFooter({ text: `Görkemli Ticket Sistemi | Prefix: ${prefix} | by Porsuk Support` });
 
-  // Create button for creating ticket
-  const createTicketButton = new ButtonBuilder()
-    .setCustomId('create_ticket')
-    .setLabel('Ticket Oluştur')
-    .setEmoji('📬')
-    .setStyle(ButtonStyle.Primary);
+  // Create button for creating ticket in raw JSON format
+  const createTicketButton = {
+    type: 2, // Button type
+    custom_id: 'create_ticket',
+    label: 'Ticket Oluştur',
+    emoji: { name: '📬' },
+    style: 1 // PRIMARY style
+  };
 
-  // Add button to action row
-  const row = new ActionRowBuilder<ButtonBuilder>()
-    .addComponents(createTicketButton);
+  // Add button to action row in raw JSON format
+  const row = {
+    type: 1, // ActionRow type
+    components: [createTicketButton]
+  };
 
   return { embed, row };
 }
@@ -56,24 +60,27 @@ export async function createTicketCategoryOptions() {
   // Get categories from database
   const categories = await storage.getAllCategories();
   
-  // Create select menu options
-  const options = categories.map(category => 
-    new StringSelectMenuOptionBuilder()
-      .setLabel(category.name)
-      .setDescription(category.description || 'No description')
-      .setValue(category.id.toString())
-      .setEmoji(category.emoji)
-  );
+  // Create select menu options in raw JSON format
+  const options = categories.map(category => ({
+    label: category.name,
+    description: category.description || 'No description',
+    value: category.id.toString(),
+    emoji: category.emoji
+  }));
   
-  // Create the select menu
-  const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId('ticket_category')
-    .setPlaceholder('Bir kategori seçin...')
-    .addOptions(options);
+  // Create the select menu in raw JSON format
+  const selectMenu = {
+    type: 3, // StringSelectMenu type
+    custom_id: 'ticket_category',
+    placeholder: 'Bir kategori seçin...',
+    options: options
+  };
   
   // Add select menu to action row
-  const row = new ActionRowBuilder<StringSelectMenuBuilder>()
-    .addComponents(selectMenu);
+  const row = {
+    type: 1, // ActionRow type
+    components: [selectMenu]
+  };
   
   return row;
 }
@@ -122,22 +129,28 @@ export async function createNewTicketEmbed(ticket: schema.Ticket & {
     });
   }
 
-  // Create buttons
-  const replyButton = new ButtonBuilder()
-    .setCustomId('reply_ticket')
-    .setLabel('Yanıtla')
-    .setEmoji('✅')
-    .setStyle(ButtonStyle.Success);
+  // Create buttons in raw JSON format
+  const replyButton = {
+    type: 2, // Button type
+    custom_id: 'reply_ticket',
+    label: 'Yanıtla',
+    emoji: { name: '✅' },
+    style: 3 // SUCCESS style
+  };
 
-  const closeButton = new ButtonBuilder()
-    .setCustomId('close_ticket')
-    .setLabel('Ticket Kapat')
-    .setEmoji('❌')
-    .setStyle(ButtonStyle.Danger);
+  const closeButton = {
+    type: 2, // Button type
+    custom_id: 'close_ticket',
+    label: 'Ticket Kapat',
+    emoji: { name: '❌' },
+    style: 4 // DANGER style
+  };
 
   // Add buttons to action row
-  const row = new ActionRowBuilder<ButtonBuilder>()
-    .addComponents(replyButton, closeButton);
+  const row = {
+    type: 1, // ActionRow type
+    components: [replyButton, closeButton]
+  };
 
   return { embed, row, activeStaff };
 }
