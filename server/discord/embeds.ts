@@ -128,8 +128,8 @@ export async function createNewTicketEmbed(ticket: schema.Ticket & {
     );
 
   if (activeStaff.length > 0) {
-    // Create a list of staff members with their names
-    const staffList = activeStaff.map(staff => `• ${staff.username}`).join('\n');
+    // Create a list of staff members with mention tags
+    const staffList = activeStaff.map(staff => `• <@${staff.discordId}>`).join('\n');
     const staffCount = activeStaff.length;
     
     embed.addFields({

@@ -438,15 +438,7 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
         
         // No need to send staff avatars, they are now included in the embed
         
-        // Send a random funny response after a short delay
-        setTimeout(async () => {
-          const funnyResponse = await storage.getRandomFunnyResponse();
-          if (funnyResponse) {
-            await channel.send({
-              content: `*${funnyResponse.content}*`
-            });
-          }
-        }, 5000);
+        // Komik mesajları kaldırdık
         
         // Send confirmation to the user
         await modalInteraction.editReply({

@@ -54,36 +54,7 @@ export async function initializeDiscordBot() {
       }
     });
 
-    // Setup periodic funny responses
-    setInterval(async () => {
-      try {
-        // Get all open tickets
-        const openTickets = await storage.getOpenTickets();
-        
-        if (openTickets.length > 0) {
-          // Pick a random ticket
-          const randomTicket = openTickets[Math.floor(Math.random() * openTickets.length)];
-          
-          if (randomTicket.channelId) {
-            // Get a random funny response
-            const funnyResponse = await storage.getRandomFunnyResponse();
-            
-            if (funnyResponse) {
-              // Find the channel
-              const channel = await client.channels.fetch(randomTicket.channelId);
-              if (channel?.isTextBased() && channel instanceof TextChannel) {
-                // Send the funny response
-                await channel.send({
-                  content: `*${funnyResponse.content}*`,
-                });
-              }
-            }
-          }
-        }
-      } catch (error) {
-        log(`Error sending funny response: ${error}`, 'discord');
-      }
-    }, 600000); // 10 minutes interval
+    // Komik mesajları kaldırdık
 
     // Set up interaction handlers
     setupSelectMenuInteraction(client);
