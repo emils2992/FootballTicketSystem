@@ -458,7 +458,7 @@ function createTicketListEmbed(tickets) {
     embed.setDescription(description);
   }
   
-  embed.setFooter('Açık ticketlara tıklayarak gidebilirsiniz');
+  embed.setFooter({ text: 'Açık ticketlara tıklayarak gidebilirsiniz' });
   
   return embed;
 }
@@ -514,41 +514,69 @@ async function handleTicketKurCommand(message) {
       const { embed, row } = await createTicketPanelEmbed(message.guild.id);
       // Panel mesajını kanala gönder
       // Önce daha önce gönderilmiş panel var mı kontrol et
-      const existingPanels = await message.channel.messages.fetch({ limit: 10 })
-        .then(messages => messages.filter(m => 
+      try {
+        // Son 25 mesajı ara
+        const messages = await message.channel.messages.fetch({ limit: 25 });
+        
+        // Filtrele: bot tarafından gönderilen + embed içeren + "Porsuk Support Ticket Sistemi" başlıklı
+        const existingPanels = messages.filter(m => 
           m.author.id === client.user.id && 
           m.embeds.length > 0 && 
           m.embeds[0].title === 'Porsuk Support Ticket Sistemi'
-        ));
-      
-      if (existingPanels.size > 0) {
-        // Varsa son paneli güncelle
-        const lastPanel = existingPanels.first();
-        await lastPanel.edit({
-          embeds: [embed],
-          components: [row]
-        });
+        );
         
-        // Yetkili role ayarlandı mesajını sadece komutu gönderene göster
-        await message.reply({ 
-          content: `✅ Yetkili rolü olarak **${selectedRole.name}** ayarlandı! Bu rol her ticket açıldığında etiketlenecek.`,
-          ephemeral: true
-        });
-      } else {
-        // Yoksa yeni panel oluştur
+        if (existingPanels.size > 0) {
+          // Tüm eski panelleri sil (ilk bulduğumuz dışında)
+          if (existingPanels.size > 1) {
+            const panelsToDelete = Array.from(existingPanels.values()).slice(1);
+            for (const oldPanel of panelsToDelete) {
+              await oldPanel.delete().catch(e => console.error('Panel silinirken hata:', e));
+            }
+          }
+          
+          // Kalan paneli güncelle
+          const lastPanel = existingPanels.first();
+          await lastPanel.edit({
+            embeds: [embed],
+            components: [row]
+          });
+          
+          // Sessiz mesaj göster
+          await message.reply({ 
+            content: `Panel güncellendi ve duplicate paneller temizlendi.`,
+          });
+        } else {
+          // Yoksa yeni panel oluştur
+          await message.channel.send({ 
+            embeds: [embed], 
+            components: [row] 
+          });
+          
+          // Yetkili role ayarlandı mesajını sadece komutu gönderene göster, mesaj gizli
+          await message.reply({ 
+            content: `Panel oluşturuldu.`,
+          });
+        }
+      } catch (fetchError) {
+        console.error('Existing panels check error:', fetchError);
+        // Hata durumunda yeni panel oluştur
         await message.channel.send({ 
           embeds: [embed], 
           components: [row] 
         });
         
-        // Yetkili role ayarlandı mesajını sadece komutu gönderene göster
         await message.reply({ 
-          content: `✅ Yetkili rolü olarak **${selectedRole.name}** ayarlandı! Bu rol her ticket açıldığında etiketlenecek.`,
-          ephemeral: true
+          content: `Panel oluşturuldu.`,
         });
       }
       
-      await roleSelection.update({ content: `Yetkili rolü olarak **${selectedRole.name}** seçildi!`, components: [] });
+      // Rol seçimi bildirimini gizliyoruz
+      try {
+        await roleSelection.update({ content: `Panel oluşturuldu.`, components: [], ephemeral: true });
+      } catch (updateError) {
+        console.error('Role selection update error:', updateError);
+        // Eğer zaten cevap verilmişse hata almamak için sessizce geç
+      }
     } catch (error) {
       console.error('Role selection error:', error);
       // Rol seçimi için süre doldu mesajı kaldırıldı (kullanıcı isteği)
@@ -723,13 +751,26 @@ async function handleTicketCreation(message, categoryId, description) {
         components: rows 
       });
       
-      // Kullanıcıya sessizce DM ile bildirim gönder
+      // Kullanıcıya kanal bilgisini SADECE kanal içinde bildir, DM ile bildirim yok
       try {
-        // Başarı mesajı göstermeden direkt olarak kanal bağlantısı gönder
-        await user.send({ content: `<#${ticketChannel.id}>` }).catch(e => console.error('DM gönderilemedi:', e));
-      } catch (dmError) {
-        console.error('DM gönderme hatası:', dmError);
-        // DM gönderilemezse hiçbir bildirim gösterme (kullanıcı isteği)
+        // SelectMenu kullanılmışsa, original mesajı güncelle ve kanal bilgisini ekle
+        if (message._interaction) {
+          try {
+            await message._interaction.followUp({ 
+              content: `Ticket oluşturuldu: <#${ticketChannel.id}>`, 
+              ephemeral: true 
+            });
+          } catch (interactionError) {
+            console.error('Interaction update error:', interactionError);
+          }
+        } else {
+          // Normal mesaj ile oluşturulduysa, cevap ver
+          await message.reply({ 
+            content: `Ticket oluşturuldu: <#${ticketChannel.id}>`
+          });
+        }
+      } catch (notifyError) {
+        console.error('Kullanıcı bildirim hatası:', notifyError);
       }
       
     } catch (error) {
@@ -756,7 +797,7 @@ async function handleTicketlarimCommand(message) {
       };
       const newUser = await storage.createOrUpdateUser(userData);
       
-      return message.reply({ content: 'Henüz bir ticket oluşturmamışsınız. .ticket komutu ile yeni bir ticket oluşturabilirsiniz.', });
+      return message.reply({ content: 'Henüz bir ticket oluşturmamışsınız. Ticket panelinden ticket oluşturabilirsiniz.', });
     }
     
     // Kullanıcının ticketlarını al
@@ -783,10 +824,10 @@ async function handleHelpCommand(message) {
       .setTitle('Porsuk Support Bot Komutları')
       .setDescription(`Aşağıdaki komutları ${prefix} önekiyle kullanabilirsiniz.`)
       .addField(`${prefix}ticketkur`, 'Ticket sistemini kur ve paneli gönder (Sadece yetkililer)', false)
-      .addField(`${prefix}ticket`, 'Yeni bir ticket oluştur', false)
+      // .ticket komutu kaldırıldı, artık panel kullanılıyor
       .addField(`${prefix}ticketlarım`, 'Oluşturduğunuz ticketları listele', false)
       .addField(`${prefix}help`, 'Bu yardım mesajını göster', false)
-      .setFooter('Porsuk Support Ticket Sistemi');
+      .setFooter({ text: 'Porsuk Support Ticket Sistemi' });
     
     message.reply({ embeds: [embed] });
   } catch (error) {
@@ -835,7 +876,7 @@ async function acceptTicket(interaction) {
           .setDescription(`Ticketınız yetkili tarafından kabul edildi.`)
           .addField('📂 Kategori:', `${ticketInfo.category_emoji || '📌'} ${ticketInfo.category_name || 'Genel Kategori'}`, false)
           .addField('👮‍♂️ İlgilenen Yetkili:', `@${interaction.user.username}`, false)
-          .setFooter(`Ticket ID: ${ticketInfo.id}`)
+          .setFooter({ text: `Ticket ID: ${ticketInfo.id}` })
           .setTimestamp();
         
         await ticketUser.send({ embeds: [dmEmbed] }).catch(error => {
@@ -901,7 +942,7 @@ async function rejectTicket(interaction) {
             .addField('📂 Kategori:', `${ticketInfo.category_emoji || '📌'} ${ticketInfo.category_name || 'Genel Kategori'}`, false)
             .addField('⛔ Red Nedeni:', rejectReason, false)
             .addField('👮‍♂️ Reddeden Yetkili:', `@${interaction.user.username}`, false)
-            .setFooter(`Ticket ID: ${ticketInfo.id}`)
+            .setFooter({ text: `Ticket ID: ${ticketInfo.id}` })
             .setTimestamp();
           
           await ticketUser.send({ embeds: [dmEmbed] }).catch(error => {
@@ -956,23 +997,14 @@ async function closeTicket(interaction) {
     // Kapatma bildirimi - sadece yetkili görecek şekilde, hiçbir mesaj gönderme
     await interaction.followUp({ content: `✅ Kanal kapanıyor...`, ephemeral: true });
     
-    // Kanalı arşivle (5 saniye bekle)
+    // Direkt olarak kanalı sil (10 saniye bekle)
     setTimeout(async () => {
       try {
-        // Burada kanalın silineceğini belirten mesaj gösterme
-        
-        // 5 saniye sonra kanalı sil
-        setTimeout(async () => {
-          try {
-            await interaction.channel.delete();
-          } catch (deleteError) {
-            console.error('Error deleting channel:', deleteError);
-          }
-        }, 5000);
-      } catch (archiveError) {
-        console.error('Error archiving channel:', archiveError);
+        await interaction.channel.delete();
+      } catch (deleteError) {
+        console.error('Error deleting channel:', deleteError);
       }
-    }, 5000);
+    }, 10000);
   } catch (error) {
     console.error('Error closing ticket:', error);
     if (!interaction.replied) {
@@ -1034,37 +1066,14 @@ async function replyToTicket(interaction) {
       // Yanıt embed'i oluştur
       const embed = new MessageEmbed()
         .setColor('#5865F2')
-        .setAuthor(interaction.user.username, interaction.user.displayAvatarURL())
+        .setAuthor({ name: interaction.user.username, iconURL: interaction.user.displayAvatarURL() })
         .setDescription(replyText)
         .setTimestamp();
       
       // Kanala bildirimde bulun
       await interaction.channel.send({ embeds: [embed] });
       
-      // Ticket sahibine DM gönder (eğer yanıt veren kişi ticket sahibi değilse)
-      if (interaction.user.id !== ticketInfo.user_discord_id) {
-        try {
-          const ticketUser = await client.users.fetch(ticketInfo.user_discord_id);
-          
-          if (ticketUser) {
-            const dmEmbed = new MessageEmbed()
-              .setColor('#5865F2')
-              .setTitle('💬 Ticketınıza Yanıt Geldi')
-              .setDescription(`Ticketınıza yanıt geldi.`)
-              .addField('👤 Yanıtlayan:', `@${interaction.user.username}`, false)
-              .addField('📝 Yanıt:', replyText, false)
-              .setFooter(`Ticket ID: ${ticketInfo.id}`)
-              .setTimestamp();
-            
-            await ticketUser.send({ embeds: [dmEmbed] }).catch(error => {
-              console.error('Could not send DM:', error);
-            });
-          }
-        } catch (dmError) {
-          console.error('DM send error:', dmError);
-          // DM gönderilmezse kanalda devam et
-        }
-      }
+      // DM gönderme işlemi kaldırıldı - kullanıcı bildirimleri sadece kanal içinde olacak
       
       // Temizlik
       await interaction.followUp({ content: 'Yanıtınız başarıyla gönderildi!', ephemeral: true });
@@ -1107,8 +1116,7 @@ client.on('messageCreate', async (message) => {
       message.reply({ content: `Pong! Bot gecikmesi: ${client.ws.ping}ms` });
     } else if (command === 'ticketkur' || command === 'ticketkurpaneli') {
       await handleTicketKurCommand(message);
-    } else if (command === 'ticket') {
-      await handleTicketCommand(message);
+    // .ticket komutu kaldırıldı
     } else if (command === 'ticketlarım' || command === 'ticketlarim') {
       await handleTicketlarimCommand(message);
     } else if (command === 'help' || command === 'yardım' || command === 'yardim') {
@@ -1211,6 +1219,7 @@ client.on('interactionCreate', async (interaction) => {
             author: interaction.user,
             guild: interaction.guild,
             channel: interaction.channel,
+            _interaction: interaction, // Interaction referansını ekleyelim
             reply: async (options) => {
               return await interaction.channel.send({
                 content: options.content || null,
@@ -1248,10 +1257,49 @@ client.on('interactionCreate', async (interaction) => {
         
         // Ticket panelini oluştur
         const { embed, row } = await createTicketPanelEmbed(interaction.guild.id);
-        await interaction.channel.send({ 
-          embeds: [embed], 
-          components: [row] 
-        });
+        
+        // Panel var mı diye kontrol et
+        try {
+          // Son 25 mesajı ara
+          const messages = await interaction.channel.messages.fetch({ limit: 25 });
+          
+          // Filtrele: bot tarafından gönderilen + embed içeren + "Porsuk Support Ticket Sistemi" başlıklı
+          const existingPanels = messages.filter(m => 
+            m.author.id === client.user.id && 
+            m.embeds.length > 0 && 
+            m.embeds[0].title === 'Porsuk Support Ticket Sistemi'
+          );
+          
+          if (existingPanels.size > 0) {
+            // Tüm eski panelleri sil (ilk bulduğumuz dışında)
+            if (existingPanels.size > 1) {
+              const panelsToDelete = Array.from(existingPanels.values()).slice(1);
+              for (const oldPanel of panelsToDelete) {
+                await oldPanel.delete().catch(e => console.error('Panel silinirken hata:', e));
+              }
+            }
+            
+            // Kalan paneli güncelle
+            const lastPanel = existingPanels.first();
+            await lastPanel.edit({
+              embeds: [embed],
+              components: [row]
+            });
+          } else {
+            // Yoksa yeni panel oluştur
+            await interaction.channel.send({ 
+              embeds: [embed], 
+              components: [row] 
+            });
+          }
+        } catch (fetchError) {
+          console.error('Existing panels check error:', fetchError);
+          // Hata durumunda yeni panel oluştur
+          await interaction.channel.send({ 
+            embeds: [embed], 
+            components: [row] 
+          });
+        }
         
         // Rol seçildikten sonra sadece kullanıcıya özel mesaj göster
         await interaction.update({ content: `Panel oluşturuldu.`, components: [], ephemeral: true });
