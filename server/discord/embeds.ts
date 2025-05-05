@@ -35,7 +35,7 @@ export async function createTicketPanelEmbed(guildId: string) {
       'Bir sorun, talep veya delikanlı gibi açıklaman mı var?\n\n' +
       '👇 Aşağıdaki seçeneklerle bir ticket oluşturabilirsin.'
     )
-    .setImage('https://cdn.discordapp.com/attachments/1107887798536056946/1240000308456042536/ticket_panel.png')
+    .setImage('https://i.imgur.com/U78xRjt.png')
     .setFooter({ text: `Görkemli Ticket Sistemi | Prefix: ${prefix} | by Porsuk Support` });
 
   // Create button for creating ticket in raw JSON format
@@ -114,7 +114,7 @@ export async function createNewTicketEmbed(ticket: schema.Ticket & {
   const embed = new EmbedBuilder()
     .setColor(0x5865F2)
     .setTitle('🎫 Yeni Ticket')
-    .setThumbnail('https://cdn.discordapp.com/attachments/1107887798536056946/1240000308195270748/ticket_info.png')
+    .setThumbnail('https://i.imgur.com/pgTRpDd.png')
     .addFields(
       {
         name: '👤 Açan:',
@@ -136,7 +136,8 @@ export async function createNewTicketEmbed(ticket: schema.Ticket & {
         value: formatDate(ticket.createdAt),
         inline: false
       }
-    );
+    )
+    .setImage('https://i.imgur.com/pgTRpDd.png');
 
   // Daima yetkilileri göster (validStaff boş olsa bile bunu gösterme)
   if (activeStaff.length > 0) {
