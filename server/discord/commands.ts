@@ -274,6 +274,14 @@ export async function setupSelectMenuInteraction(client: Client) {
             case 'reply_ticket':
               await replyToTicket(interaction);
               break;
+              
+            case 'accept_ticket':
+              await acceptTicket(interaction);
+              break;
+              
+            case 'reject_ticket':
+              await rejectTicket(interaction);
+              break;
           }
         }
       }
@@ -479,7 +487,7 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
       const ticketData = await storage.getTicketById(ticket.id);
       
       if (ticketData) {
-        const { embed, row, activeStaff } = await createNewTicketEmbed(ticketData);
+        const { embed, rows, activeStaff } = await createNewTicketEmbed(ticketData);
         
         // Staff rolünü etiketle
         let messageContent = `<@${modalInteraction.user.id}>, ticket oluşturuldu.`;
@@ -489,11 +497,11 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
           messageContent += `\n<@&${staffRoleId}>, yeni bir ticket açıldı!`;
         }
         
-        // Construct a message mentioning the user and convert row to proper message component
+        // Construct a message mentioning the user and convert rows to proper message components
         const messageOptions = {
           content: messageContent,
           embeds: [embed],
-          components: [row] // row is already in raw JSON format for Discord.js
+          components: rows // Multiple rows are already in raw JSON format for Discord.js
         };
         
         // Send the embed to the channel

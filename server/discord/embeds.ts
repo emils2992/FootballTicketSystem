@@ -172,25 +172,49 @@ export async function createNewTicketEmbed(ticket: schema.Ticket & {
     type: 2, // Button type
     custom_id: 'reply_ticket',
     label: 'Yanıtla',
+    emoji: { name: '💬' },
+    style: 1 // PRIMARY style
+  };
+  
+  const acceptButton = {
+    type: 2, // Button type
+    custom_id: 'accept_ticket',
+    label: 'Kabul Et',
     emoji: { name: '✅' },
     style: 3 // SUCCESS style
   };
-
+  
+  const rejectButton = {
+    type: 2, // Button type
+    custom_id: 'reject_ticket',
+    label: 'Reddet',
+    emoji: { name: '⛔' },
+    style: 4 // DANGER style
+  };
+  
   const closeButton = {
     type: 2, // Button type
     custom_id: 'close_ticket',
-    label: 'Ticket Kapat',
+    label: 'Kapat',
     emoji: { name: '❌' },
-    style: 4 // DANGER style
+    style: 2 // SECONDARY style
   };
 
-  // Add buttons to action row
-  const row = {
+  // Create two rows for buttons
+  const row1 = {
+    type: 1, // ActionRow type
+    components: [acceptButton, rejectButton]
+  };
+  
+  const row2 = {
     type: 1, // ActionRow type
     components: [replyButton, closeButton]
   };
+  
+  // Combine the rows
+  const rows = [row1, row2];
 
-  return { embed, row, activeStaff };
+  return { embed, rows, activeStaff };
 }
 
 // Ticket list embed
@@ -208,8 +232,30 @@ export function createTicketListEmbed(tickets: (schema.Ticket & {
     let description = '';
     
     tickets.forEach((ticket, index) => {
-      const statusEmoji = ticket.status === 'open' ? '🟢' : '🔴';
-      const statusText = ticket.status === 'open' ? 'Açık' : 'Kapalı';
+      let statusEmoji, statusText;
+      
+      switch (ticket.status) {
+        case 'pending':
+          statusEmoji = '🟠';
+          statusText = 'Beklemede';
+          break;
+        case 'accepted':
+          statusEmoji = '🟢';
+          statusText = 'Kabul Edildi';
+          break;
+        case 'rejected':
+          statusEmoji = '🔴';
+          statusText = 'Reddedildi';
+          break;
+        case 'closed':
+          statusEmoji = '⚫';
+          statusText = 'Kapatıldı';
+          break;
+        default:
+          statusEmoji = '🟠';
+          statusText = 'Beklemede';
+      }
+      
       description += `**${index + 1}.** ${ticket.category?.emoji || '📌'} ${ticket.category?.name || 'Genel Kategori'} - ${statusEmoji} ${statusText}\n`;
     });
     
