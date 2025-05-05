@@ -596,10 +596,20 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
     }
   } catch (error) {
     log(`Error creating ticket: ${error}`, 'discord');
-    await modalInteraction.reply({
-      content: 'Ticket oluşturulurken bir hata oluştu!',
-      ephemeral: true
-    });
+    try {
+      if (!modalInteraction.replied && !modalInteraction.deferred) {
+        await modalInteraction.reply({
+          content: 'Ticket oluşturulurken bir hata oluştu!',
+          ephemeral: true
+        });
+      } else if (modalInteraction.deferred) {
+        await modalInteraction.editReply({
+          content: 'Ticket oluşturulurken bir hata oluştu!'
+        });
+      }
+    } catch (replyError) {
+      log(`Error responding to modal: ${replyError}`, 'discord');
+    }
   }
 }
 
@@ -951,10 +961,12 @@ async function acceptTicket(interaction: ButtonInteraction) {
     });
     
     // Add accepted status message to channel
-    await interaction.channel?.send({
-      content: `🟢 **Ticket Kabul Edildi**\nYetkili: <@${interaction.user.id}>\n\nTicket işleme alındı ve inceleniyor.`,
-      allowedMentions: { users: [] }
-    });
+    if (interaction.channel && interaction.channel.isTextBased() && 'send' in interaction.channel) {
+      await interaction.channel.send({
+        content: `🟢 **Ticket Kabul Edildi**\nYetkili: <@${interaction.user.id}>\n\nTicket işleme alındı ve inceleniyor.`,
+        allowedMentions: { users: [] }
+      });
+    }
     
   } catch (error) {
     log(`Error accepting ticket: ${error}`, 'discord');
@@ -1069,10 +1081,12 @@ async function rejectTicket(interaction: ButtonInteraction) {
           });
           
           // Add rejected status message to channel
-          await interaction.channel?.send({
-            content: `🔴 **Ticket Reddedildi**\nYetkili: <@${interaction.user.id}>\n\nRed Sebebi: ${reason}`,
-            allowedMentions: { users: [] }
-          });
+          if (interaction.channel && interaction.channel.isTextBased() && 'send' in interaction.channel) {
+            await interaction.channel.send({
+              content: `🔴 **Ticket Reddedildi**\nYetkili: <@${interaction.user.id}>\n\nRed Sebebi: ${reason}`,
+              allowedMentions: { users: [] }
+            });
+          }
           
           // Close ticket channel after 30 seconds
           setTimeout(async () => {
