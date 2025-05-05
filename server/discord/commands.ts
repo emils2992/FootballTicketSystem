@@ -37,6 +37,10 @@ export async function handleCommands(message: Message, prefix: string, client: C
     case 'ticketkur':
       await handleTicketKurCommand(message);
       break;
+      
+    case 'ticket':
+      await handleTicketCommand(message);
+      break;
 
     case 'ticketlarım':
       await handleTicketlarimCommand(message);
@@ -83,7 +87,13 @@ async function handleTicketKurCommand(message: Message) {
       const { embed, row } = await createTicketPanelEmbed(guildId);
 
       // Send the panel
-      const panel = await message.channel.send({
+      // Cast channel to TextChannel to fix TypeScript error
+      const textChannel = message.channel;
+      if (!textChannel.isTextBased()) {
+        throw new Error("Channel is not text-based");
+      }
+        
+      const panel = await textChannel.send({
         embeds: [embed],
         components: [row]
       });
@@ -410,6 +420,106 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
   }
 }
 
+// Command: .ticket - Creates a new ticket directly
+async function handleTicketCommand(message: Message) {
+  try {
+    // Get categories from database
+    const categories = await storage.getAllCategories();
+    
+    if (categories.length === 0) {
+      await message.reply('Henüz hiç ticket kategorisi tanımlanmamış!');
+      return;
+    }
+    
+    // Create a selection menu with categories
+    const options = categories.map(category => ({
+      label: category.name,
+      description: category.description || 'No description',
+      value: category.id.toString(),
+      emoji: category.emoji
+    }));
+    
+    const selectMenu = {
+      type: 3, // StringSelectMenu type
+      custom_id: 'ticket_category_direct',
+      placeholder: 'Bir kategori seçin...',
+      options: options
+    };
+    
+    const row = new ActionRowBuilder()
+      .addComponents(selectMenu);
+    
+    // Send the message with the menu
+    await message.reply({
+      content: '**Yeni Ticket Oluştur**\nLütfen bir kategori seçin:',
+      components: [row]
+    });
+    
+    // Set up collector for the response
+    const filter = (i: MessageComponentInteraction) => 
+      i.customId === 'ticket_category_direct' && i.user.id === message.author.id;
+    
+    const collector = message.channel.createMessageComponentCollector({ 
+      filter, 
+      time: 60000,
+      max: 1
+    });
+    
+    collector.on('collect', async (interaction) => {
+      if (interaction.isStringSelectMenu()) {
+        const categoryId = parseInt(interaction.values[0]);
+        
+        // Create description input modal
+        const modal = new ModalBuilder()
+          .setCustomId(`ticket_modal_direct_${categoryId}`)
+          .setTitle('Yeni Ticket Oluştur');
+        
+        // Add description input
+        const descriptionInput = new TextInputBuilder()
+          .setCustomId('ticket_description')
+          .setLabel('Açıklama')
+          .setPlaceholder('Açıklamanı kısa ve net yaz kardeşim...')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true)
+          .setMinLength(10)
+          .setMaxLength(500);
+        
+        // Create action row with input
+        const descriptionRow = new ActionRowBuilder<TextInputBuilder>()
+          .addComponents(descriptionInput);
+        
+        // Add row to modal
+        modal.addComponents(descriptionRow);
+        
+        // Show modal
+        await interaction.showModal(modal);
+        
+        // Set up modal submit collector
+        const modalFilter = (i: ModalSubmitInteraction) => 
+          i.customId === `ticket_modal_direct_${categoryId}` && i.user.id === message.author.id;
+        
+        interaction.awaitModalSubmit({ filter: modalFilter, time: 60000 })
+          .then(async (modalInteraction) => {
+            await handleTicketCreation(modalInteraction, categoryId);
+          })
+          .catch((error) => {
+            log(`Error in modal submission: ${error}`, 'discord');
+          });
+      }
+    });
+    
+    collector.on('end', collected => {
+      if (collected.size === 0) {
+        message.reply('Ticket oluşturma işlemi zaman aşımına uğradı.');
+      }
+    });
+    
+  } catch (error) {
+    log(`Error in ticket command: ${error}`, 'discord');
+    await message.reply('Ticket oluşturulurken bir hata oluştu!');
+  }
+}
+
 // Command: .ticketlarım - Shows user's tickets
 async function handleTicketlarimCommand(message: Message) {
   try {
@@ -526,7 +636,12 @@ async function handleHelpCommand(message: Message, prefix: string) {
       fields: [
         {
           name: `${prefix}ticketkur`,
-          value: 'Ticket panel oluşturur. (Sadece Yöneticiler)',
+          value: 'Ticket panel oluşturur ve yetkili rolünü ayarlar. (Sadece Yöneticiler)',
+          inline: false
+        },
+        {
+          name: `${prefix}ticket`,
+          value: 'Doğrudan yeni bir ticket oluşturur.',
           inline: false
         },
         {
