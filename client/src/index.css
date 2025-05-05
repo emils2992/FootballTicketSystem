@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  :root {
+    --background: 223 7% 24%;
+    --foreground: 220 13% 87%;
+    
+    --card: 222 7% 20%;
+    --card-foreground: 220 13% 87%;
+    
+    --popover: 222 7% 20%;
+    --popover-foreground: 220 13% 87%;
+    
+    --primary: 235 73% 67%;
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 210 3% 25%;
+    --secondary-foreground: 220 13% 87%;
+    
+    --muted: 210 3% 25%;
+    --muted-foreground: 214 8% 52%;
+    
+    --accent: 210 3% 25%;
+    --accent-foreground: 220 13% 87%;
+    
+    --destructive: 0 69% 59%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --success: 142 67% 65%;
+    --success-foreground: 210 8% 20%;
+    
+    --warning: 49 97% 68%;
+    --warning-foreground: 210 8% 20%;
+    
+    --border: 216 4% 27%;
+    --input: 216 4% 27%;
+    --ring: 235 73% 67%;
+    
+    --radius: 0.5rem;
+  }
+}
+
+@layer components {
+  .discord-embed {
+    @apply bg-card rounded-md border-l-4 border-primary;
+  }
+  
+  .discord-button {
+    @apply bg-secondary hover:bg-secondary/80 text-foreground rounded transition-colors;
+  }
+  
+  .discord-button.primary {
+    @apply bg-primary hover:bg-primary/80;
+  }
+  
+  .discord-button.danger {
+    @apply bg-destructive hover:bg-destructive/80;
+  }
+  
+  .discord-button.success {
+    @apply bg-[#57F287] hover:bg-[#45C269] text-[#2D3136];
+  }
+  
+  .avatar {
+    @apply rounded-full overflow-hidden bg-primary;
+  }
+  
+  .avatar-group .avatar {
+    @apply border-2 border-background -ml-2 transition-transform hover:translate-y-[-5px] hover:z-10;
+  }
+  
+  .ticket-list-item {
+    @apply transition-colors hover:bg-muted cursor-pointer;
+  }
+  
+  .dropdown {
+    @apply bg-muted rounded relative;
+  }
+  
+  .dropdown-menu {
+    @apply absolute top-full left-0 w-full bg-secondary/90 rounded overflow-hidden z-10 shadow-lg;
+  }
+  
+  .dropdown-item {
+    @apply p-3 cursor-pointer transition-colors hover:bg-primary;
+  }
+  
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/85 flex items-center justify-center z-50;
+  }
+  
+  .modal-content {
+    @apply bg-background rounded-md w-full max-w-md;
+  }
+}
