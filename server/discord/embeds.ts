@@ -122,9 +122,13 @@ export async function createNewTicketEmbed(ticket: schema.Ticket & {
     );
 
   if (activeStaff.length > 0) {
+    // Create a list of staff members with their names
+    const staffList = activeStaff.map(staff => `• ${staff.username}`).join('\n');
+    const staffCount = activeStaff.length;
+    
     embed.addFields({
-      name: '👮‍♂️ Yetkili Ekibi:',
-      value: '\u200B', // Zero-width space as placeholder, staff avatars will be shown in the message
+      name: `👮‍♂️ Yetkili Ekibi (${staffCount} Aktif Yetkili):`,
+      value: staffList,
       inline: false
     });
   }

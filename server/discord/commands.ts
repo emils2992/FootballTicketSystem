@@ -37,10 +37,6 @@ export async function handleCommands(message: Message, prefix: string, client: C
     case 'ticketkur':
       await handleTicketKurCommand(message);
       break;
-      
-    case 'ticket':
-      await handleTicketCommand(message);
-      break;
 
     case 'ticketlarım':
       await handleTicketlarimCommand(message);
@@ -380,16 +376,7 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
         // Pin the message
         await message.pin();
         
-        // Send staff avatars if any
-        if (activeStaff.length > 0) {
-          const staffAvatars = activeStaff.map(staff => 
-            `<img src="${staff.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" width="40" height="40" style="border-radius:50%;margin-right:5px;border:2px solid #2F3136" alt="${staff.username}" />`
-          ).join('');
-          
-          await channel.send({
-            content: '**Yetkili Ekibi:**\n' + staffAvatars
-          });
-        }
+        // No need to send staff avatars, they are now included in the embed
         
         // Send a random funny response after a short delay
         setTimeout(async () => {
@@ -641,11 +628,6 @@ async function handleHelpCommand(message: Message, prefix: string) {
         {
           name: `${prefix}ticketkur`,
           value: 'Ticket panel oluşturur ve yetkili rolünü ayarlar. (Sadece Yöneticiler)',
-          inline: false
-        },
-        {
-          name: `${prefix}ticket`,
-          value: 'Doğrudan yeni bir ticket oluşturur.',
           inline: false
         },
         {

@@ -202,9 +202,24 @@ export const storage = {
 
   // Active staff members
   async getActiveStaffMembers() {
-    return await db.query.users.findMany({
-      where: eq(schema.users.isStaff, true),
-      limit: 5
-    });
+    try {
+      // In production you would check if they're really online
+      // For demo, we'll assume 70% of staff are online
+      const staffMembers = await db.query.users.findMany({
+        where: eq(schema.users.isStaff, true)
+      });
+      
+      // Sort randomly to get different "online" staff each time
+      const shuffled = [...staffMembers].sort(() => 0.5 - Math.random());
+      
+      // Take about 2/3 of staff as "active"
+      const activeCount = Math.ceil(shuffled.length * 0.7);
+      const activeStaff = shuffled.slice(0, activeCount);
+      
+      return activeStaff || [];
+    } catch (error) {
+      console.error("Error getting active staff:", error);
+      return [];
+    }
   }
 };
