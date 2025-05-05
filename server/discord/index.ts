@@ -1,6 +1,6 @@
-import { Client, IntentsBitField, Partials, Events, GatewayIntentBits } from 'discord.js';
+import { Client, IntentsBitField, Partials, Events, GatewayIntentBits, REST, Routes, TextChannel } from 'discord.js';
 import { log } from '../vite';
-import { handleCommands } from './commands';
+import { handleCommands, setupSelectMenuInteraction } from './commands';
 import { storage } from '../storage';
 
 // Initialize Discord client with necessary intents
@@ -71,7 +71,7 @@ export async function initializeDiscordBot() {
             if (funnyResponse) {
               // Find the channel
               const channel = await client.channels.fetch(randomTicket.channelId);
-              if (channel?.isTextBased()) {
+              if (channel?.isTextBased() && channel instanceof TextChannel) {
                 // Send the funny response
                 await channel.send({
                   content: `*${funnyResponse.content}*`,
@@ -85,6 +85,12 @@ export async function initializeDiscordBot() {
       }
     }, 600000); // 10 minutes interval
 
+    // Set up interaction handlers
+    setupSelectMenuInteraction(client);
+
+    // Log that bot is ready
+    log(`Bot is fully initialized and ready to handle interactions`, 'discord');
+    
     return client;
   } catch (error) {
     log(`Failed to initialize Discord bot: ${error}`, 'discord');

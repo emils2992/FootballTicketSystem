@@ -104,7 +104,7 @@ async function handleTicketKurCommand(message: Message) {
       // Set up button interaction collectors
       const collector = panel.createMessageComponentCollector();
       
-      collector.on('collect', async (interaction) => {
+      collector.on('collect', async (interaction: any) => {
         if (interaction.isButton()) {
           await handleTicketButtonInteraction(interaction);
         }
@@ -448,12 +448,18 @@ async function handleTicketCommand(message: Message) {
     }
     
     // Create a selection menu with categories
-    const options = categories.map(category => ({
-      label: category.name,
-      description: category.description || 'No description',
-      value: category.id.toString(),
-      emoji: { name: category.emoji }
-    }));
+    const options = categories.map(category => {
+      const emoji = category.emoji.includes(':') 
+        ? { id: category.emoji.split(':')[2]?.replace('>', '') } 
+        : { name: category.emoji };
+      
+      return {
+        label: category.name,
+        description: category.description || 'No description',
+        value: category.id.toString(),
+        emoji: emoji
+      };
+    });
     
     // Create a proper SelectMenu that works with Discord.js
     const selectMenu = {
@@ -776,7 +782,7 @@ async function closeTicket(interaction: ButtonInteraction) {
     if (settings?.logChannelId) {
       const logChannel = await interaction.client.channels.fetch(settings.logChannelId);
       
-      if (logChannel?.isTextBased()) {
+      if (logChannel?.isTextBased() && (logChannel instanceof TextChannel)) {
         const updatedTicket = await storage.getTicketById(ticketData.id);
         if (updatedTicket) {
           const embed = createTicketLogEmbed(updatedTicket);
