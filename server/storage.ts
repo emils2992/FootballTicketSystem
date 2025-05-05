@@ -125,6 +125,26 @@ export const storage = {
     return ticket;
   },
   
+  async acceptTicket(ticketId: number) {
+    const [ticket] = await db.update(schema.tickets)
+      .set({ status: "accepted" })
+      .where(eq(schema.tickets.id, ticketId))
+      .returning();
+    return ticket;
+  },
+  
+  async rejectTicket(ticketId: number, rejectReason: string) {
+    const [ticket] = await db.update(schema.tickets)
+      .set({ 
+        status: "rejected",
+        rejectReason,
+        closedAt: new Date()
+      })
+      .where(eq(schema.tickets.id, ticketId))
+      .returning();
+    return ticket;
+  },
+  
   async updateTicketChannel(ticketId: number, channelId: string) {
     const [ticket] = await db.update(schema.tickets)
       .set({ channelId })
@@ -135,7 +155,7 @@ export const storage = {
 
   async getOpenTickets() {
     return await db.query.tickets.findMany({
-      where: eq(schema.tickets.status, "open"),
+      where: eq(schema.tickets.status, "pending"),
       with: {
         category: true,
         user: true,

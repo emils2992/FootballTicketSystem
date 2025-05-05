@@ -27,7 +27,8 @@ export const tickets = pgTable("tickets", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description").notNull(),
-  status: text("status").notNull().default("open"), // open, closed
+  status: text("status").notNull().default("pending"), // pending, accepted, rejected, closed
+  rejectReason: text("reject_reason"),
   categoryId: integer("category_id").references(() => ticketCategories.id),
   userId: integer("user_id").references(() => users.id),
   assignedToId: integer("assigned_to_id").references(() => users.id),
@@ -104,7 +105,7 @@ export const insertTicketCategorySchema = createInsertSchema(ticketCategories, {
 
 export const insertTicketSchema = createInsertSchema(tickets, {
   title: (schema) => schema.min(3, "Title must be at least 3 characters"),
-  description: (schema) => schema.min(10, "Description must be at least 10 characters"),
+  description: (schema) => schema.min(1, "Description cannot be empty"),
 });
 
 export const insertTicketResponseSchema = createInsertSchema(ticketResponses, {
