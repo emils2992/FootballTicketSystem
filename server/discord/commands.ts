@@ -436,7 +436,7 @@ async function handleTicketCommand(message: Message) {
       label: category.name,
       description: category.description || 'No description',
       value: category.id.toString(),
-      emoji: category.emoji
+      emoji: { name: category.emoji }
     }));
     
     // Create a proper SelectMenu that works with Discord.js

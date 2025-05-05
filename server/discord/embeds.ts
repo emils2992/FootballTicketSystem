@@ -60,12 +60,12 @@ export async function createTicketCategoryOptions() {
   // Get categories from database
   const categories = await storage.getAllCategories();
   
-  // Create select menu options in raw JSON format
+  // Create select menu options in raw JSON format with proper emoji formatting
   const options = categories.map(category => ({
     label: category.name,
     description: category.description || 'No description',
     value: category.id.toString(),
-    emoji: category.emoji
+    emoji: { name: category.emoji }
   }));
   
   // Create the select menu in raw JSON format
