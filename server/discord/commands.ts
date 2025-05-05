@@ -27,7 +27,7 @@ import {
   createTicketListEmbed,
   createTicketLogEmbed
 } from './embeds';
-import { createWelcomeCard, createSimpleWelcomeCard, createBackupWelcomeCard } from './welcome-card';
+import { getWelcomeImage } from './welcome-card';
 
 // Handle all message commands
 export async function handleCommands(message: Message, prefix: string, client: Client) {
@@ -594,17 +594,8 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
         const randomImageIndex = Math.floor(Math.random() * footballImages.length);
         const footballImage = footballImages[randomImageIndex];
         
-        // Özel hoşgeldin kartı oluşturma
-        const welcomeCardUrl = await createWelcomeCard(modalInteraction.user);
-        let simpleCardUrl = ""; // Yedek kart
-
-        // Alternatif olarak farklı bir API de deneyebiliriz
-        try {
-          simpleCardUrl = createSimpleWelcomeCard(modalInteraction.user);
-        } catch (error) {
-          log(`Yedek kart oluşturma hatası: ${error}`, 'discord');
-          simpleCardUrl = createBackupWelcomeCard(modalInteraction.user);
-        }
+        // Yüksek kaliteli stadyum fotoğrafı al
+        const welcomeImage = getWelcomeImage();
 
         // Construct a message mentioning the user and convert rows to proper message components
         const messageOptions = {
@@ -615,7 +606,7 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
               title: welcomeMessage,
               color: 0x3498db,
               image: {
-                url: welcomeCardUrl
+                url: welcomeImage
               },
               author: {
                 name: `${modalInteraction.user.username} - Yeni Ticket Açıldı!`,
@@ -624,7 +615,7 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
               footer: {
                 text: footerQuotes[Math.floor(Math.random() * footerQuotes.length)]
               },
-              description: `👋 **HOŞGELDİN ${modalInteraction.user.username.toUpperCase()}!**\n\n🎯 Ticket sistemine hoş geldiniz!\n\n🎵 **Şampiyonlar Ligi marşı çalıyor!** 🎵\n[Şampiyonlar Ligi marşını dinlemek için tıkla](https://www.youtube.com/watch?v=0Qqd6T_A9LY)`
+              description: null
             }
           ],
           components: rows // Multiple rows are already in raw JSON format for Discord.js
