@@ -203,20 +203,19 @@ export const storage = {
   // Active staff members
   async getActiveStaffMembers() {
     try {
-      // In production you would check if they're really online
-      // For demo, we'll assume 70% of staff are online
+      // Tüm yetkili kullanıcıları al
       const staffMembers = await db.query.users.findMany({
         where: eq(schema.users.isStaff, true)
       });
       
-      // Sort randomly to get different "online" staff each time
-      const shuffled = [...staffMembers].sort(() => 0.5 - Math.random());
+      // Veritabanında yetkili yoksa boş dizi döndür
+      if (staffMembers.length === 0) {
+        return [];
+      }
       
-      // Take about 2/3 of staff as "active"
-      const activeCount = Math.ceil(shuffled.length * 0.7);
-      const activeStaff = shuffled.slice(0, activeCount);
-      
-      return activeStaff || [];
+      // Tüm yetkilileri "aktif" olarak kabul et
+      // Gerçek Discord online durumunu kontrol etmiyoruz
+      return staffMembers;
     } catch (error) {
       console.error("Error getting active staff:", error);
       return [];

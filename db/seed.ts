@@ -48,18 +48,21 @@ async function seed() {
         username: "Yusuf", 
         password: "hashed_password", 
         isStaff: true,
+        discordId: "794205713533894696", // Sizin Discord ID'niz
         avatar: "https://images.unsplash.com/photo-1568602471122-7832951cc4c5?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=100&q=80"
       },
       { 
         username: "Caner", 
         password: "hashed_password", 
         isStaff: true,
+        discordId: "123456789012345678", // Örnek Discord ID
         avatar: "https://images.unsplash.com/photo-1599566150163-29194dcaad36?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=100&q=80"
       },
       { 
         username: "Ali", 
         password: "hashed_password", 
         isStaff: true,
+        discordId: "987654321098765432", // Örnek Discord ID
         avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=100&q=80"
       }
     ];
