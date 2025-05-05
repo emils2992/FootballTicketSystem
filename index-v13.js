@@ -57,8 +57,27 @@ defaultCategories.forEach(category => {
 // Helper functions
 function formatDate(date) {
   if (!date) return 'Bilinmiyor';
-  const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-  return new Date(date).toLocaleDateString('tr-TR', options);
+  
+  // Yerel zamanı kullan ve manuel tarih oluştur
+  const now = new Date(date);
+  
+  // Türkçe aylar
+  const months = [
+    'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+    'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+  ];
+  
+  // Tarih bileşenlerini oluştur
+  const day = now.getDate();
+  const month = months[now.getMonth()];
+  const year = now.getFullYear();
+  
+  // Saat bileşenlerini oluştur
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  
+  // Formatlanmış tarihi döndür
+  return `${day} ${month} ${year} ${hours}:${minutes}`;
 }
 
 // Storage functions
@@ -221,7 +240,7 @@ const storage = {
     return ticket;
   },
   
-  async closeTicket(ticketId) {
+  async closeTicket(ticketId, closedByUserId = null) {
     const ticket = memoryStorage.tickets.get(parseInt(ticketId));
     if (!ticket) return null;
     
@@ -229,7 +248,47 @@ const storage = {
     ticket.closed_at = new Date();
     ticket.updated_at = new Date();
     
+    // Kapatan kullanıcıyı kaydet (eğer belirtilmişse)
+    if (closedByUserId) {
+      ticket.closed_by_user_id = closedByUserId;
+    }
+    
     return ticket;
+  },
+  
+  // Yetkililerin kapatma sayılarını getir
+  async getStaffTicketStats() {
+    // Ticket verileri üzerinden istatistikleri hesapla
+    const closedTickets = Array.from(memoryStorage.tickets.values())
+      .filter(ticket => ticket.status === 'closed' && ticket.closed_by_user_id);
+    
+    // Kullanıcılara göre grupla
+    const staffStats = {};
+    
+    for (const ticket of closedTickets) {
+      const staffId = ticket.closed_by_user_id;
+      if (!staffStats[staffId]) {
+        staffStats[staffId] = 0;
+      }
+      staffStats[staffId]++;
+    }
+    
+    // Kullanıcı verilerini ekle
+    const results = [];
+    for (const [staffId, count] of Object.entries(staffStats)) {
+      const user = memoryStorage.users.get(parseInt(staffId));
+      if (user) {
+        results.push({
+          user_id: parseInt(staffId),
+          username: user.username,
+          discord_id: user.discord_id,
+          closed_tickets: count
+        });
+      }
+    }
+    
+    // Kapatılan ticket sayısına göre sırala
+    return results.sort((a, b) => b.closed_tickets - a.closed_tickets);
   },
   
   async assignTicket(ticketId, staffId) {
@@ -470,6 +529,25 @@ async function handleTicketKurCommand(message) {
     return message.reply({ content: 'Bu komutu kullanabilmek için yetkili olmalısın delikanlı.' });
   }
   
+  // Komutun kullanıldığı kanal ID'sini kaydet (çift komut çalışmasını engellemek için)
+  const channelAndUserKey = `${message.channel.id}_${message.author.id}`;
+  
+  // Son birkaç saniye içinde aynı komut çalıştırılmış mı kontrol et
+  const now = Date.now();
+  const lastCommandTime = memoryStorage.lastCommandTimes?.get(channelAndUserKey) || 0;
+  
+  // Eğer son 10 saniye içinde aynı kullanıcı aynı kanalda bu komutu çalıştırdıysa, engelle
+  if (now - lastCommandTime < 10000) {
+    console.log(`Command cooldown for ${message.author.tag} in channel ${message.channel.id}`);
+    return; // Sessizce engelle
+  }
+  
+  // Komut kullanım zamanını kaydet
+  if (!memoryStorage.lastCommandTimes) {
+    memoryStorage.lastCommandTimes = new Map();
+  }
+  memoryStorage.lastCommandTimes.set(channelAndUserKey, now);
+  
   try {
     // Sunucudaki roller
     const roles = message.guild.roles.cache.filter(role => 
@@ -518,11 +596,11 @@ async function handleTicketKurCommand(message) {
         // Son 25 mesajı ara
         const messages = await message.channel.messages.fetch({ limit: 25 });
         
-        // Filtrele: bot tarafından gönderilen + embed içeren + "Porsuk Support Ticket Sistemi" başlıklı
+        // Filtrele: bot tarafından gönderilen + embed içeren + "Futbol RP Ticket Paneli" başlıklı
         const existingPanels = messages.filter(m => 
           m.author.id === client.user.id && 
           m.embeds.length > 0 && 
-          m.embeds[0].title === 'Porsuk Support Ticket Sistemi'
+          m.embeds[0].title === '🎟️ Futbol RP Ticket Paneli'
         );
         
         if (existingPanels.size > 0) {
@@ -698,20 +776,20 @@ async function handleTicketCreation(message, categoryId, description) {
         type: 'GUILD_TEXT',
         permissionOverwrites: [
           {
-            id: guild.id, // @everyone
-            deny: ['VIEW_CHANNEL']
+            id: guild.id, // @everyone - Kanalı kimsenin görmemesini sağla
+            deny: [Permissions.FLAGS.VIEW_CHANNEL, Permissions.FLAGS.SEND_MESSAGES]
           },
           {
             id: user.id, // Ticket oluşturan kullanıcı
-            allow: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'READ_MESSAGE_HISTORY']
+            allow: [Permissions.FLAGS.VIEW_CHANNEL, Permissions.FLAGS.SEND_MESSAGES, Permissions.FLAGS.READ_MESSAGE_HISTORY]
           },
           {
             id: staffRoleId, // Staff rolü
-            allow: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'READ_MESSAGE_HISTORY']
+            allow: [Permissions.FLAGS.VIEW_CHANNEL, Permissions.FLAGS.SEND_MESSAGES, Permissions.FLAGS.READ_MESSAGE_HISTORY]
           },
           {
             id: client.user.id, // Bot kendisi
-            allow: ['VIEW_CHANNEL', 'SEND_MESSAGES', 'READ_MESSAGE_HISTORY']
+            allow: [Permissions.FLAGS.VIEW_CHANNEL, Permissions.FLAGS.SEND_MESSAGES, Permissions.FLAGS.READ_MESSAGE_HISTORY]
           }
         ]
       });
@@ -744,11 +822,12 @@ async function handleTicketCreation(message, categoryId, description) {
       // Ticket embed ve butonlarını oluştur
       const { embed, rows } = await createNewTicketEmbed(ticketInfo);
       
-      // Yetkili rolünü ve kullanıcıyı etiketle ve mesajı gönder
+      // Yetkili rolünü etiketle (everyone etiketlemeden) ve mesajı gönder
       await ticketChannel.send({ 
         content: `<@&${staffRoleId}> Yeni bir ticket oluşturuldu! <@${user.id}> tarafından.`, 
         embeds: [embed], 
-        components: rows 
+        components: rows,
+        allowedMentions: { roles: [staffRoleId], users: [user.id] } // Sadece belirli rol ve kullanıcıları etiketle
       });
       
       // Kullanıcıya kanal bilgisini SADECE kanal içinde bildir, DM ile bildirim yok
@@ -813,6 +892,44 @@ async function handleTicketlarimCommand(message) {
   }
 }
 
+// Ticket istatistiklerini gösteren fonksiyon
+async function handleTicketStatsCommand(message) {
+  try {
+    // Sadece yetkililerin kullanabilmesi için kontrol
+    if (!isStaffMember(message.member)) {
+      return message.reply({ content: 'Bu komutu kullanabilmek için yetkili olmalısın.' });
+    }
+    
+    // Yetkililerin ticket istatistiklerini al
+    const stats = await storage.getStaffTicketStats();
+    
+    if (stats.length === 0) {
+      return message.reply({ content: 'Henüz hiç ticket kapatılmamış veya istatistik bulunamadı.' });
+    }
+    
+    // Embed oluştur
+    const embed = new MessageEmbed()
+      .setColor('#5865F2')
+      .setTitle('📊 Ticket Kapama İstatistikleri')
+      .setDescription('Yetkililerin kapatmış olduğu ticket sayıları:')
+      .setTimestamp();
+    
+    // İstatistikleri ekle
+    stats.forEach((stat, index) => {
+      embed.addField(
+        `${index + 1}. ${stat.username}`, 
+        `👮‍♂️ <@${stat.discord_id}>\n🎫 ${stat.closed_tickets} ticket kapatmış`,
+        true
+      );
+    });
+    
+    message.reply({ embeds: [embed] });
+  } catch (error) {
+    console.error('Error displaying ticket stats:', error);
+    message.reply({ content: 'Ticket istatistikleri gösterilirken bir hata oluştu.' });
+  }
+}
+
 async function handleHelpCommand(message) {
   try {
     // Prefix'i al (bot ayarlarından veya varsayılan)
@@ -826,6 +943,7 @@ async function handleHelpCommand(message) {
       .addField(`${prefix}ticketkur`, 'Ticket sistemini kur ve paneli gönder (Sadece yetkililer)', false)
       // .ticket komutu kaldırıldı, artık panel kullanılıyor
       .addField(`${prefix}ticketlarım`, 'Oluşturduğunuz ticketları listele', false)
+      .addField(`${prefix}ticketstats`, 'Yetkililerin kaç ticket kapattığını göster (Sadece yetkililer)', false)
       .addField(`${prefix}help`, 'Bu yardım mesajını göster', false)
       .setFooter({ text: 'Porsuk Support Ticket Sistemi' });
     
@@ -991,10 +1109,23 @@ async function closeTicket(interaction) {
       return interaction.followUp({ content: 'Ticket bilgisi bulunamadı.' });
     }
     
-    // Ticket'ı kapat
-    await storage.closeTicket(ticketInfo.id);
+    // Yetkilinin kendisini güncelle/kaydet
+    const staffData = {
+      discordId: interaction.user.id,
+      username: interaction.user.username,
+      avatarUrl: interaction.user.displayAvatarURL()
+    };
     
-    // Kapatma bildirimi - sadece yetkili görecek şekilde, hiçbir mesaj gönderme
+    const staffUser = await storage.createOrUpdateUser(staffData);
+    
+    if (!staffUser) {
+      return interaction.followUp({ content: 'Yetkili bilgisi güncellenemedi.' });
+    }
+    
+    // Ticket'ı kapat - kapatanın ID'sini de kaydet
+    await storage.closeTicket(ticketInfo.id, staffUser.id);
+    
+    // Kapatma bildirimi - sadece yetkili görecek şekilde
     await interaction.followUp({ content: `✅ Kanal kapanıyor...`, ephemeral: true });
     
     // Direkt olarak kanalı sil (10 saniye bekle)
@@ -1119,6 +1250,8 @@ client.on('messageCreate', async (message) => {
     // .ticket komutu kaldırıldı
     } else if (command === 'ticketlarım' || command === 'ticketlarim') {
       await handleTicketlarimCommand(message);
+    } else if (command === 'ticketstats') {
+      await handleTicketStatsCommand(message);
     } else if (command === 'help' || command === 'yardım' || command === 'yardim') {
       await handleHelpCommand(message);
     }
