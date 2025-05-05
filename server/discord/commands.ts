@@ -204,6 +204,35 @@ export async function setupSelectMenuInteraction(client: Client) {
         }
       }
       
+      // Handle button interactions in tickets
+      if (interaction.isButton()) {
+        switch (interaction.customId) {
+          case 'create_ticket':
+            // Get categories from database
+            const categoryRow = await createTicketCategoryOptions();
+            
+            // Show category selection menu
+            await interaction.reply({
+              content: '**Yeni Ticket Oluştur**\nLütfen bir kategori seçin:',
+              components: [categoryRow],
+              ephemeral: true
+            });
+            break;
+            
+          case 'my_tickets':
+            await showUserTickets(interaction);
+            break;
+            
+          case 'close_ticket':
+            await closeTicket(interaction);
+            break;
+            
+          case 'reply_ticket':
+            await replyToTicket(interaction);
+            break;
+        }
+      }
+      
       // Handle modal submissions for tickets
       if (interaction.isModalSubmit()) {
         const customId = interaction.customId;
