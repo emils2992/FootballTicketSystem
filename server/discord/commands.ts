@@ -15,7 +15,8 @@ import {
   GuildChannel,
   ChannelSelectMenuBuilder,
   ChannelSelectMenuInteraction,
-  MessageCreateOptions
+  MessageCreateOptions,
+  TextChannel
 } from 'discord.js';
 import { log } from '../vite';
 import { storage } from '../storage';
@@ -84,11 +85,12 @@ async function handleTicketKurCommand(message: Message) {
 
       // Send the panel
       // Cast channel to TextChannel to fix TypeScript error
-      const textChannel = message.channel;
-      if (!textChannel.isTextBased()) {
+      if (!message.channel || !message.channel.isTextBased()) {
         throw new Error("Channel is not text-based");
       }
-        
+      
+      const textChannel = message.channel as TextChannel;
+      
       const panel = await textChannel.send({
         embeds: [embed],
         components: [row]
