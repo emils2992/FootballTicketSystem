@@ -555,7 +555,7 @@ async function handleTicketKurCommand(message) {
       await roleSelection.update({ content: `Yetkili rolü olarak **${selectedRole.name}** seçildi!`, components: [] });
     } catch (error) {
       console.error('Role selection error:', error);
-      message.channel.send('Rol seçimi için süre doldu. Lütfen tekrar deneyin.');
+      // Rol seçimi için süre doldu mesajı kaldırıldı (kullanıcı isteği)
     }
   } catch (error) {
     console.error('Error creating ticket panel:', error);
@@ -629,7 +629,7 @@ async function handleTicketCommand(message) {
       
     } catch (error) {
       console.error('Error awaiting category selection:', error);
-      message.channel.send({ content: 'Kategori seçimi için süre doldu. Lütfen tekrar deneyin.' });
+      // Kategori seçimi için süre doldu mesajı kaldırıldı (kullanıcı isteği)
     }
   } catch (error) {
     console.error('Error creating ticket command:', error);
@@ -744,8 +744,8 @@ async function handleTicketCreation(interaction, categoryId, description) {
         components: rows 
       });
       
-      // Kullanıcıya bilgi ver
-      await interaction.followUp({ content: `✅ Ticket başarıyla oluşturuldu! <#${ticketChannel.id}>`, ephemeral: true });
+      // Kullanıcıya bilgi ver (başarı mesajı kaldırıldı, kullanıcı isteği)
+      await interaction.followUp({ content: `Ticket işleminiz tamamlandı.`, ephemeral: true });
       
     } catch (error) {
       console.error('Error creating ticket channel:', error);

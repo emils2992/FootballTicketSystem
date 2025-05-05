@@ -1,4 +1,4 @@
-import { Client, IntentsBitField, Partials, Events, GatewayIntentBits, REST, Routes, TextChannel } from 'discord.js';
+import { Client, Intents, TextChannel } from 'discord.js';
 import { log } from '../vite';
 import { handleCommands, setupSelectMenuInteraction } from './commands';
 import { storage } from '../storage';
@@ -6,13 +6,13 @@ import { storage } from '../storage';
 // Initialize Discord client with necessary intents
 const client = new Client({
   intents: [
-    IntentsBitField.Flags.Guilds,
-    IntentsBitField.Flags.GuildMessages,
-    IntentsBitField.Flags.MessageContent,
-    IntentsBitField.Flags.GuildMembers,
-    GatewayIntentBits.GuildMessageReactions
+    Intents.FLAGS.GUILDS,
+    Intents.FLAGS.GUILD_MESSAGES,
+    Intents.FLAGS.GUILD_MESSAGE_REACTIONS,
+    Intents.FLAGS.GUILD_MEMBERS,
+    Intents.FLAGS.DIRECT_MESSAGES
   ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction],
+  partials: ['MESSAGE', 'CHANNEL', 'REACTION'],
 });
 
 // Discord token from environment variable
@@ -34,7 +34,7 @@ export async function initializeDiscordBot() {
     client.user?.setActivity('.ticketkur | Futbol RP', { type: 0 });
 
     // Set up event handlers
-    client.on(Events.MessageCreate, async (message) => {
+    client.on('messageCreate', async (message) => {
       // Ignore bot messages
       if (message.author.bot) return;
 

@@ -572,52 +572,15 @@ async function handleTicketCommand(message) {
       
       const categoryId = parseInt(categorySelection.values[0]);
       
-      // Discord.js v13'te Modallar doğrudan yok, bunun yerine soru-cevap ile ilerliyoruz
-      // Kullanıcıdan açıklama iste
-      const followUp = await message.channel.send({
-        content: `<@${message.author.id}>, lütfen ticket açıklamanızı yazın:`
-      });
+      // Açıklama istemeden direkt olarak ticket oluştur (kullanıcı isteği)
+      // Varsayılan bir açıklama kullan
+      const description = "Açıklama belirtilmedi";
       
-      // Açıklama bekleme filtresi
-      const messageFilter = m => m.author.id === message.author.id && m.channelId === message.channel.id;
-      
-      try {
-        const collected = await message.channel.awaitMessages({
-          filter: messageFilter,
-          max: 1,
-          time: 120000,
-          errors: ['time']
-        });
-        
-        const description = collected.first().content;
-        
-        // Ticket oluştur
-        await handleTicketCreation(message, categoryId, description);
-        
-        // Temizlik
-        if (followUp && followUp.deletable) {
-          try {
-            await followUp.delete();
-          } catch (e) {
-            console.error('Could not delete followup message:', e);
-          }
-        }
-        
-        if (collected.first() && collected.first().deletable) {
-          try {
-            await collected.first().delete();
-          } catch (e) {
-            console.error('Could not delete collected message:', e);
-          }
-        }
-        
-      } catch (error) {
-        console.error('Error collecting message:', error);
-        message.channel.send({ content: 'Ticket açıklaması için süre doldu. Lütfen tekrar deneyin.' });
-      }
+      // Ticket oluştur
+      await handleTicketCreation(message, categoryId, description);
     } catch (error) {
       console.error('Error awaiting category selection:', error);
-      message.channel.send({ content: 'Kategori seçimi için süre doldu. Lütfen tekrar deneyin.' });
+      // Kategori seçimi için süre doldu mesajı kaldırıldı (kullanıcı isteği)
     }
   } catch (error) {
     console.error('Error creating ticket command:', error);
@@ -731,8 +694,13 @@ async function handleTicketCreation(message, categoryId, description) {
         components: rows 
       });
       
-      // Kullanıcıya bilgi ver
-      await message.reply({ content: `✅ Ticket başarıyla oluşturuldu! <#${ticketChannel.id}>` });
+      // Kullanıcıya DM ile bildirim gönder
+      try {
+        await user.send({ content: `Ticket işleminiz tamamlandı. Kanal: <#${ticketChannel.id}>` }).catch(e => console.error('DM gönderilemedi:', e));
+      } catch (dmError) {
+        console.error('DM gönderme hatası:', dmError);
+        // DM gönderilemezse hiçbir bildirim gösterme (kullanıcı isteği)
+      }
       
     } catch (error) {
       console.error('Error creating ticket channel:', error);

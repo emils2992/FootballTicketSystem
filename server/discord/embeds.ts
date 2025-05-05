@@ -1,11 +1,8 @@
 import { 
-  EmbedBuilder, 
-  ButtonBuilder, 
-  ActionRowBuilder, 
-  SelectMenuBuilder, 
-  ButtonStyle,
-  StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder
+  MessageEmbed, 
+  MessageButton, 
+  MessageActionRow, 
+  MessageSelectMenu
 } from 'discord.js';
 import { formatDistanceToNow, format } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -28,15 +25,15 @@ export async function createTicketPanelEmbed(guildId: string) {
   const prefix = settings?.prefix || '.';
   
   // Create the embed
-  const embed = new EmbedBuilder()
-    .setColor(0x5865F2) // Discord blurple color
+  const embed = new MessageEmbed()
+    .setColor('#5865F2') // Discord blurple color
     .setTitle('🎟️ Futbol RP Ticket Paneli')
     .setDescription(
       'Bir sorun, talep veya delikanlı gibi açıklaman mı var?\n\n' +
       '👇 Aşağıdaki seçeneklerle bir ticket oluşturabilirsin.'
     )
     .setImage('https://i.imgur.com/U78xRjt.png')
-    .setFooter({ text: `Görkemli Ticket Sistemi | Prefix: ${prefix} | by Porsuk Support` });
+    .setFooter(`Görkemli Ticket Sistemi | Prefix: ${prefix} | by Porsuk Support`);
 
   // Create button for creating ticket in raw JSON format
   const createTicketButton = {
@@ -111,32 +108,14 @@ export async function createNewTicketEmbed(ticket: schema.Ticket & {
   const activeStaff = await storage.getActiveStaffMembers();
   
   // Create the embed
-  const embed = new EmbedBuilder()
-    .setColor(0x5865F2)
+  const embed = new MessageEmbed()
+    .setColor('#5865F2')
     .setTitle('🎫 Yeni Ticket')
     .setThumbnail('https://i.imgur.com/pgTRpDd.png')
-    .addFields(
-      {
-        name: '👤 Açan:',
-        value: `@${ticket.user?.username || 'Bilinmeyen Kullanıcı'}`,
-        inline: false
-      },
-      {
-        name: '📂 Kategori:',
-        value: `${ticket.category?.emoji || '📌'} ${ticket.category?.name || 'Genel Kategori'}`,
-        inline: false
-      },
-      {
-        name: '📝 Açıklama:',
-        value: `"${ticket.description}"`,
-        inline: false
-      },
-      {
-        name: '📆 Açılış:',
-        value: formatDate(ticket.createdAt),
-        inline: false
-      }
-    )
+    .addField('👤 Açan:', `@${ticket.user?.username || 'Bilinmeyen Kullanıcı'}`, false)
+    .addField('📂 Kategori:', `${ticket.category?.emoji || '📌'} ${ticket.category?.name || 'Genel Kategori'}`, false)
+    .addField('📝 Açıklama:', `"${ticket.description}"`, false)
+    .addField('📆 Açılış:', formatDate(ticket.createdAt), false)
     .setImage('https://i.imgur.com/pgTRpDd.png');
 
   // Daima yetkilileri göster (validStaff boş olsa bile bunu gösterme)
@@ -225,8 +204,8 @@ export function createTicketListEmbed(tickets: (schema.Ticket & {
   category: schema.TicketCategory | null 
 })[]) {
   // Create the embed
-  const embed = new EmbedBuilder()
-    .setColor(0x5865F2)
+  const embed = new MessageEmbed()
+    .setColor('#5865F2')
     .setTitle('📋 Ticketlarım');
   
   if (tickets.length === 0) {
@@ -265,7 +244,7 @@ export function createTicketListEmbed(tickets: (schema.Ticket & {
     embed.setDescription(description);
   }
   
-  embed.setFooter({ text: 'Açık ticketlara tıklayarak gidebilirsiniz' });
+  embed.setFooter('Açık ticketlara tıklayarak gidebilirsiniz');
   
   return embed;
 }
@@ -277,26 +256,12 @@ export function createTicketLogEmbed(ticket: schema.Ticket & {
   assignedTo: schema.User | null
 }) {
   // Create the embed
-  const embed = new EmbedBuilder()
-    .setColor(0x5865F2)
+  const embed = new MessageEmbed()
+    .setColor('#5865F2')
     .setTitle(`📁 Ticket Özeti - #ticket-${ticket.user?.username || 'unknown'}`)
-    .addFields(
-      {
-        name: '👤 Açan:',
-        value: `@${ticket.user?.username || 'Bilinmeyen Kullanıcı'}`,
-        inline: false
-      },
-      {
-        name: '🎯 Konu:',
-        value: ticket.category?.name || 'Genel Kategori',
-        inline: false
-      },
-      {
-        name: '📝 Açıklama:',
-        value: `"${ticket.description}"`,
-        inline: false
-      }
-    );
+    .addField('👤 Açan:', `@${ticket.user?.username || 'Bilinmeyen Kullanıcı'}`, false)
+    .addField('🎯 Konu:', ticket.category?.name || 'Genel Kategori', false)
+    .addField('📝 Açıklama:', `"${ticket.description}"`, false);
   
   // Add timing information if available
   if (ticket.createdAt) {
@@ -308,25 +273,15 @@ export function createTicketLogEmbed(ticket: schema.Ticket & {
       timeInfo += ` | Kapatıldı: ${closeTime}`;
     }
     
-    embed.addFields({
-      name: '⏱️ Süreler:',
-      value: timeInfo,
-      inline: false
-    });
+    embed.addField('⏱️ Süreler:', timeInfo, false);
   }
   
   // Add assigned staff member if available
   if (ticket.assignedTo) {
-    embed.addFields({
-      name: '👮‍♂️ İlgilenen Yetkili:',
-      value: `@${ticket.assignedTo.username}`,
-      inline: false
-    });
+    embed.addField('👮‍♂️ İlgilenen Yetkili:', `@${ticket.assignedTo.username}`, false);
   }
   
-  embed.setFooter({ 
-    text: `Ticket Log Sistemi • ${format(new Date(), 'd MMMM yyyy', { locale: tr })}` 
-  });
+  embed.setFooter(`Ticket Log Sistemi • ${format(new Date(), 'd MMMM yyyy', { locale: tr })}`);
   
   return embed;
 }

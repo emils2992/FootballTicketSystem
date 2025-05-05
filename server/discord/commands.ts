@@ -1,21 +1,20 @@
 import { 
   Message, 
   Client, 
-  ModalBuilder, 
-  TextInputBuilder, 
-  TextInputStyle, 
-  ActionRowBuilder,
-  ChannelType,
-  PermissionsBitField,
+  MessageActionRow, 
+  MessageButton,
+  MessageSelectMenu,
+  Modal,
+  TextInputComponent,
+  Permissions,
+  Interaction,
   ButtonInteraction,
-  StringSelectMenuInteraction,
+  SelectMenuInteraction,
   ModalSubmitInteraction,
   MessageComponentInteraction,
   GuildMember,
   GuildChannel,
-  ChannelSelectMenuBuilder,
-  ChannelSelectMenuInteraction,
-  MessageCreateOptions,
+  MessageOptions,
   TextChannel
 } from 'discord.js';
 import { log } from '../vite';
@@ -58,7 +57,7 @@ export async function handleCommands(message: Message, prefix: string, client: C
 async function handleTicketKurCommand(message: Message) {
   try {
     // Check if user has admin permission
-    if (!message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    if (!message.member?.permissions.has('ADMINISTRATOR')) {
       await message.reply('Bu komutu kullanmak için yönetici yetkisine sahip olmalısın!');
       return;
     }
@@ -114,19 +113,8 @@ async function handleTicketKurCommand(message: Message) {
         }
       });
       
-      // Mesajı sadece sunucu sahibine DM olarak gönder
-      try {
-        if (message.guild?.ownerId) {
-          const owner = await message.guild.members.fetch(message.guild.ownerId);
-          if (owner) {
-            await owner.send('✅ Ticket paneli başarıyla oluşturuldu!');
-          }
-        }
-        // Kanal mesajını artık göstermiyoruz
-      } catch (error) {
-        log(`DM gönderme hatası: ${error}`, 'discord');
-        // DM gönderilemezse sessizce devam et
-      }
+      // Başarı mesajı göndermiyoruz (istek üzerine kaldırıldı)
+      log(`Ticket paneli başarıyla ${message.channel.id} kanalına kuruldu`, 'discord');
     }
     // Handle staff role setup
     else if (subCommand === 'yetkili') {
@@ -584,9 +572,10 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
         
         // No need to send staff avatars, they are now included in the embed
         
-        // Send confirmation to the user
+        // Sesizce tamamlandı, kullanıcıya mesaj göstermiyoruz
+        // Not: Kullanıcı bildirimi istenmiyor (kanal id gösterimini kaldırdık)
         await modalInteraction.editReply({
-          content: `Ticket oluşturuldu! Lütfen <#${channel.id}> kanalına gidin.`
+          content: `Ticket işleminiz tamamlandı.`
         });
       }
     } else {
