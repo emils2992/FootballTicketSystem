@@ -121,12 +121,10 @@ async function handleTicketKurCommand(message: Message) {
             await owner.send('✅ Ticket paneli başarıyla oluşturuldu!');
           }
         }
-        // Başarılı mesajını kanal içinde göster
-        await message.reply('✅ İşlem tamamlandı.');
+        // Kanal mesajını artık göstermiyoruz
       } catch (error) {
         log(`DM gönderme hatası: ${error}`, 'discord');
-        // DM gönderilemezse sunucuda mesaj göster
-        await message.reply('✅ Ticket paneli başarıyla oluşturuldu!');
+        // DM gönderilemezse sessizce devam et
       }
     }
     // Handle staff role setup
@@ -231,10 +229,18 @@ async function handleTicketButtonInteraction(interaction: ButtonInteraction) {
     }
   } catch (error) {
     log(`Error handling button interaction: ${error}`, 'discord');
-    await interaction.reply({
-      content: 'İşlem sırasında bir hata oluştu!',
-      ephemeral: true
-    });
+    try {
+      // Sadece eğer henüz yanıtlanmamışsa hata mesajı gönder
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: 'İşlem sırasında bir hata oluştu!',
+          ephemeral: true
+        });
+      }
+    } catch (replyError) {
+      log(`Error sending error reply: ${replyError}`, 'discord');
+      // Sessizce devam et
+    }
   }
 }
 
@@ -251,32 +257,24 @@ export async function setupSelectMenuInteraction(client: Client) {
         }
       }
       
-      // Handle button interactions in tickets
+      // Handle button interactions in tickets, but only process buttons from panel
+      // Avoid running duplication of handleTicketButtonInteraction
       if (interaction.isButton()) {
-        switch (interaction.customId) {
-          case 'create_ticket':
-            // Get categories from database
-            const categoryRow = await createTicketCategoryOptions();
-            
-            // Show category selection menu
-            await interaction.reply({
-              content: '**Yeni Ticket Oluştur**\nLütfen bir kategori seçin:',
-              components: [categoryRow],
-              ephemeral: true
-            });
-            break;
-            
-          case 'my_tickets':
-            await showUserTickets(interaction);
-            break;
-            
-          case 'close_ticket':
-            await closeTicket(interaction);
-            break;
-            
-          case 'reply_ticket':
-            await replyToTicket(interaction);
-            break;
+        // Skip 'create_ticket' processing here because it's already handled in button collector
+        if (interaction.customId !== 'create_ticket') {
+          switch (interaction.customId) {
+            case 'my_tickets':
+              await showUserTickets(interaction);
+              break;
+              
+            case 'close_ticket':
+              await closeTicket(interaction);
+              break;
+              
+            case 'reply_ticket':
+              await replyToTicket(interaction);
+              break;
+          }
         }
       }
       
