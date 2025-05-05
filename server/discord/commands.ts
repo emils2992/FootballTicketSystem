@@ -342,7 +342,7 @@ async function handleCategorySelection(interaction: StringSelectMenuInteraction)
       .setPlaceholder('Açıklamanı kısa ve net yaz kardeşim...')
       .setStyle(TextInputStyle.Paragraph)
       .setRequired(true)
-      .setMinLength(10)
+      .setMinLength(1) // Minimum 1 karakter olarak değiştirildi (istediğini yazabilirsin)
       .setMaxLength(500);
     
     // Create action row with input and convert to proper format that works with Discord.js
@@ -615,7 +615,7 @@ async function handleTicketCommand(message: Message) {
           .setPlaceholder('Açıklamanı kısa ve net yaz kardeşim...')
           .setStyle(TextInputStyle.Paragraph)
           .setRequired(true)
-          .setMinLength(10)
+          .setMinLength(1) // Minimum 1 karakter olarak değiştirildi
           .setMaxLength(500);
         
         // Create action row with input

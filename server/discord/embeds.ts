@@ -45,11 +45,20 @@ export async function createTicketPanelEmbed(guildId: string) {
     emoji: { name: '📬' },
     style: 1 // PRIMARY style
   };
+  
+  // Create the "my tickets" button
+  const myTicketsButton = {
+    type: 2, // Button type
+    custom_id: 'my_tickets',
+    label: 'Ticketlarım',
+    emoji: { name: '📋' },
+    style: 2 // SECONDARY style
+  };
 
-  // Add button to action row in raw JSON format
+  // Add buttons to action row in raw JSON format
   const row = {
     type: 1, // ActionRow type
-    components: [createTicketButton]
+    components: [createTicketButton, myTicketsButton]
   };
 
   return { embed, row };
