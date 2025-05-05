@@ -128,15 +128,25 @@ export async function createNewTicketEmbed(ticket: schema.Ticket & {
     );
 
   if (activeStaff.length > 0) {
-    // Create a list of staff members with mention tags
-    const staffList = activeStaff.map(staff => `• <@${staff.discordId}>`).join('\n');
-    const staffCount = activeStaff.length;
+    // Boş discordId'leri filtrele ve geçerli olanları etiketler olarak ekle
+    const validStaff = activeStaff.filter(staff => staff.discordId);
     
-    embed.addFields({
-      name: `👮‍♂️ Yetkili Ekibi (${staffCount} Aktif Yetkili):`,
-      value: staffList,
-      inline: false
-    });
+    if (validStaff.length > 0) {
+      const staffList = validStaff.map(staff => `• <@${staff.discordId}>`).join('\n');
+      const staffCount = validStaff.length;
+      
+      embed.addFields({
+        name: `👮‍♂️ Yetkili Ekibi (${staffCount} Aktif Yetkili):`,
+        value: staffList || "Aktif yetkili bulunamadı.",
+        inline: false
+      });
+    } else {
+      embed.addFields({
+        name: `👮‍♂️ Yetkili Ekibi:`,
+        value: "Aktif yetkili bulunamadı. Yetkili rolü ayarlamak için `.ticketkur yetkili @rol` komutunu kullanın.",
+        inline: false
+      });
+    }
   }
 
   // Create buttons in raw JSON format

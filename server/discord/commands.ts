@@ -70,7 +70,8 @@ async function handleTicketKurCommand(message: Message) {
         '**Ticket Sistemi Kurulum**\n\n' +
         'Kullanım:\n' +
         '`.ticketkur panel` - Ticket oluşturma panelini oluşturur\n' +
-        '`.ticketkur yetkili @rol` - Ticket kanallarına erişebilecek yetkili rolünü ayarlar'
+        '`.ticketkur yetkili @rol` - Ticket kanallarına erişebilecek yetkili rolünü ayarlar\n' +
+        '`.ticketkur log #kanal` - Ticket log kanalını ayarlar'
       );
       return;
     }
@@ -153,12 +154,44 @@ async function handleTicketKurCommand(message: Message) {
       
       await message.reply(`✅ Yetkili rolü başarıyla \`@${role.name}\` olarak ayarlandı!`);
     }
+    // Handle log channel setup
+    else if (subCommand === 'log') {
+      const channelId = args[1]?.match(/\d+/)?.[0];
+      
+      if (!channelId) {
+        await message.reply('Lütfen geçerli bir kanal etiketleyin: `.ticketkur log #kanaladi`');
+        return;
+      }
+      
+      // Check if the channel exists in the guild
+      const channel = message.guild?.channels.cache.get(channelId);
+      if (!channel) {
+        await message.reply('Belirtilen kanal bulunamadı. Lütfen geçerli bir kanal etiketleyin.');
+        return;
+      }
+      
+      // Check if the channel is a text channel
+      if (!channel.isTextBased()) {
+        await message.reply('Belirtilen kanal bir metin kanalı değil. Lütfen geçerli bir metin kanalı etiketleyin.');
+        return;
+      }
+      
+      // Save the log channel ID to database
+      if (message.guild?.id) {
+        await storage.updateBotSettings(message.guild.id, {
+          logChannelId: channelId
+        });
+      }
+      
+      await message.reply(`✅ Log kanalı başarıyla \`#${channel.name}\` olarak ayarlandı!`);
+    }
     else {
       await message.reply(
         '**Geçersiz alt komut!**\n\n' +
         'Kullanım:\n' +
         '`.ticketkur panel` - Ticket oluşturma panelini oluşturur\n' +
-        '`.ticketkur yetkili @rol` - Ticket kanallarına erişebilecek yetkili rolünü ayarlar'
+        '`.ticketkur yetkili @rol` - Ticket kanallarına erişebilecek yetkili rolünü ayarlar\n' +
+        '`.ticketkur log #kanal` - Ticket log kanalını ayarlar'
       );
     }
 
@@ -474,7 +507,7 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
             const logChannel = modalInteraction.guild.channels.cache.get(logChannelId);
             if (logChannel && logChannel.isTextBased()) {
               await logChannel.send({
-                content: `📩 Yeni ticket oluşturuldu: <#${channel.id}>\n👤 Açan: <@${modalInteraction.user.id}>\n📂 Kategori: ${ticket.category?.name}`,
+                content: `📩 Yeni ticket oluşturuldu: <#${channel.id}>\n👤 Açan: <@${modalInteraction.user.id}>\n📂 Kategori: ${category.name}`,
                 embeds: [embed]
               });
             }
