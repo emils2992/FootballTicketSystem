@@ -112,7 +112,21 @@ async function handleTicketKurCommand(message: Message) {
         }
       });
       
-      await message.reply('✅ Ticket paneli başarıyla oluşturuldu!');
+      // Mesajı sadece sunucu sahibine DM olarak gönder
+      try {
+        if (message.guild?.ownerId) {
+          const owner = await message.guild.members.fetch(message.guild.ownerId);
+          if (owner) {
+            await owner.send('✅ Ticket paneli başarıyla oluşturuldu!');
+          }
+        }
+        // Başarılı mesajını kanal içinde göster
+        await message.reply('✅ İşlem tamamlandı.');
+      } catch (error) {
+        log(`DM gönderme hatası: ${error}`, 'discord');
+        // DM gönderilemezse sunucuda mesaj göster
+        await message.reply('✅ Ticket paneli başarıyla oluşturuldu!');
+      }
     }
     // Handle staff role setup
     else if (subCommand === 'yetkili') {
@@ -368,8 +382,21 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
       const guildSettings = await storage.getBotSettings(modalInteraction.guild.id);
       const staffRoleId = guildSettings?.staffRoleId;
       
-      // Channel name
-      const channelName = `ticket-${username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+      // Kanal ismi için ticket sayısını al
+      let ticketNumber = 1;
+      try {
+        // Sunucudaki ticket- ile başlayan kanalları say
+        const ticketChannels = modalInteraction.guild.channels.cache.filter(
+          ch => ch.name.startsWith('ticket-')
+        );
+        // Kanal sayısına 1 ekle
+        ticketNumber = ticketChannels.size + 1;
+      } catch (error) {
+        log(`Ticket numarası hesaplanırken hata: ${error}`, 'discord');
+      }
+      
+      // Sayısal formatta kanal adı oluştur
+      const channelName = `ticket-${ticketNumber}`;
       
       // Create channel
       const channel = await modalInteraction.guild.channels.create({

@@ -25,7 +25,7 @@ export async function createTicketPanelEmbed(guildId: string) {
   
   // Get guild settings to get the prefix
   const settings = await storage.getBotSettings(guildId);
-  const prefix = settings?.prefix || '!';
+  const prefix = settings?.prefix || '.';
   
   // Create the embed
   const embed = new EmbedBuilder()
