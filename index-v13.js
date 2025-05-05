@@ -14,7 +14,10 @@ app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
 
-// Discord client
+// Son komut kullanım zamanlarını tutacak Map (komut çift çalışma sorununu önlemek için)
+const lastCommandTimes = new Map();
+
+// Discord client - Her sunucuda @everyone etiketlenmesini önlemek için allowedMentions ayarını ekledik
 const client = new Client({ 
   intents: [
     Intents.FLAGS.GUILDS,
@@ -22,7 +25,13 @@ const client = new Client({
     Intents.FLAGS.GUILD_MEMBERS,
     Intents.FLAGS.DIRECT_MESSAGES
   ],
-  partials: ['MESSAGE', 'CHANNEL', 'REACTION']
+  partials: ['MESSAGE', 'CHANNEL', 'REACTION'],
+  // Tüm botun mesajları için @everyone ve @here etiketlerini devre dışı bırak
+  allowedMentions: { 
+    parse: ['users', 'roles'], // Yalnızca kullanıcı ve rol etiketlerine izin ver
+    everyone: false, // @everyone'u devre dışı bırak 
+    repliedUser: true // Yanıtlarda kullanıcıyı etiketle
+  }
 });
 
 // Bot prefix
@@ -596,11 +605,14 @@ async function handleTicketKurCommand(message) {
         // Son 25 mesajı ara
         const messages = await message.channel.messages.fetch({ limit: 25 });
         
-        // Filtrele: bot tarafından gönderilen + embed içeren + "Futbol RP Ticket Paneli" başlıklı
+        // Filtrele: bot tarafından gönderilen + embed içeren + ticket sistemine ait başlıklı
         const existingPanels = messages.filter(m => 
           m.author.id === client.user.id && 
           m.embeds.length > 0 && 
-          m.embeds[0].title === '🎟️ Futbol RP Ticket Paneli'
+          (m.embeds[0].title === '🎟️ Futbol RP Ticket Paneli' || 
+           m.embeds[0].title === '🎟️ Porsuk Support Ticket Sistemi' ||
+           m.embeds[0].title.includes('Ticket') ||
+           m.embeds[0].title.includes('ticket'))
         );
         
         if (existingPanels.size > 0) {
@@ -619,10 +631,7 @@ async function handleTicketKurCommand(message) {
             components: [row]
           });
           
-          // Sessiz mesaj göster
-          await message.reply({ 
-            content: `Panel güncellendi ve duplicate paneller temizlendi.`,
-          });
+          // Sessiz mesaj artık gösterilmiyor
         } else {
           // Yoksa yeni panel oluştur
           await message.channel.send({ 
@@ -630,10 +639,7 @@ async function handleTicketKurCommand(message) {
             components: [row] 
           });
           
-          // Yetkili role ayarlandı mesajını sadece komutu gönderene göster, mesaj gizli
-          await message.reply({ 
-            content: `Panel oluşturuldu.`,
-          });
+          // Artık panel oluşturuldu mesajı gösterilmiyor
         }
       } catch (fetchError) {
         console.error('Existing panels check error:', fetchError);
@@ -643,18 +649,12 @@ async function handleTicketKurCommand(message) {
           components: [row] 
         });
         
-        await message.reply({ 
-          content: `Panel oluşturuldu.`,
-        });
+        // Panel mesajları artık gösterilmiyor
       }
       
-      // Rol seçimi bildirimini gizliyoruz
-      try {
-        await roleSelection.update({ content: `Panel oluşturuldu.`, components: [], ephemeral: true });
-      } catch (updateError) {
-        console.error('Role selection update error:', updateError);
-        // Eğer zaten cevap verilmişse hata almamak için sessizce geç
-      }
+      // Rol seçiminden sonra herhangi bir güncelleme yapmaya çalışmıyoruz
+      // Eğer zaten cevap verilmişse (INTERACTION_ALREADY_REPLIED) hatası almamak için
+      // roleSelection.update() çağrısı kaldırıldı
     } catch (error) {
       console.error('Role selection error:', error);
       // Rol seçimi için süre doldu mesajı kaldırıldı (kullanıcı isteği)
@@ -827,7 +827,13 @@ async function handleTicketCreation(message, categoryId, description) {
         content: `<@&${staffRoleId}> Yeni bir ticket oluşturuldu! <@${user.id}> tarafından.`, 
         embeds: [embed], 
         components: rows,
-        allowedMentions: { roles: [staffRoleId], users: [user.id] } // Sadece belirli rol ve kullanıcıları etiketle
+        // Kesinlikle sadece belirtilen rol ve kullanıcıyı etiketle, everyone veya here olmasın
+        allowedMentions: { 
+          parse: [], // Hiçbir metni otomatik parse etme  
+          roles: [staffRoleId], // Sadece bu rol ID'sini etiketle
+          users: [user.id], // Sadece bu kullanıcı ID'sini etiketle
+          everyone: false // @everyone kesinlikle devre dışı
+        }
       });
       
       // Kullanıcıya kanal bilgisini SADECE kanal içinde bildir, DM ile bildirim yok
@@ -845,7 +851,8 @@ async function handleTicketCreation(message, categoryId, description) {
         } else {
           // Normal mesaj ile oluşturulduysa, cevap ver
           await message.reply({ 
-            content: `Ticket oluşturuldu: <#${ticketChannel.id}>`
+            content: `Ticket oluşturuldu: <#${ticketChannel.id}>`,
+            allowedMentions: { parse: ['users'], everyone: false }
           });
         }
       } catch (notifyError) {
@@ -993,7 +1000,7 @@ async function acceptTicket(interaction) {
           .setTitle('✅ Ticketınız Kabul Edildi')
           .setDescription(`Ticketınız yetkili tarafından kabul edildi.`)
           .addField('📂 Kategori:', `${ticketInfo.category_emoji || '📌'} ${ticketInfo.category_name || 'Genel Kategori'}`, false)
-          .addField('👮‍♂️ İlgilenen Yetkili:', `@${interaction.user.username}`, false)
+          .addField('👮‍♂️ İlgilenen Yetkili:', `${interaction.user.username}`, false)
           .setFooter({ text: `Ticket ID: ${ticketInfo.id}` })
           .setTimestamp();
         
@@ -1059,7 +1066,7 @@ async function rejectTicket(interaction) {
             .setDescription(`Ticketınız yetkili tarafından reddedildi.`)
             .addField('📂 Kategori:', `${ticketInfo.category_emoji || '📌'} ${ticketInfo.category_name || 'Genel Kategori'}`, false)
             .addField('⛔ Red Nedeni:', rejectReason, false)
-            .addField('👮‍♂️ Reddeden Yetkili:', `@${interaction.user.username}`, false)
+            .addField('👮‍♂️ Reddeden Yetkili:', `${interaction.user.username}`, false)
             .setFooter({ text: `Ticket ID: ${ticketInfo.id}` })
             .setTimestamp();
           
@@ -1202,7 +1209,10 @@ async function replyToTicket(interaction) {
         .setTimestamp();
       
       // Kanala bildirimde bulun
-      await interaction.channel.send({ embeds: [embed] });
+      await interaction.channel.send({ 
+        embeds: [embed],
+        allowedMentions: { parse: ['users'], everyone: false }
+      });
       
       // DM gönderme işlemi kaldırıldı - kullanıcı bildirimleri sadece kanal içinde olacak
       
@@ -1240,12 +1250,35 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
     
+    // Kullanıcı + kanal + komut kombinasyonu için cooldown kontrolü yap
+    const commandKey = `${message.author.id}-${message.channel.id}-${command}`;
+    const now = Date.now();
+    const cooldownTime = 10000; // 10 saniye
+    
+    // Son kullanım zamanını kontrol et
+    if (lastCommandTimes.has(commandKey)) {
+      const lastUsage = lastCommandTimes.get(commandKey);
+      const timeElapsed = now - lastUsage;
+      
+      // Kullanıcı bu komutu bu kanalda son 10 saniye içinde kullandıysa, sessizce yoksay
+      if (timeElapsed < cooldownTime) {
+        console.log(`Command ${command} ignored: cooldown (${timeElapsed}ms < ${cooldownTime}ms)`);
+        return;
+      }
+    }
+    
+    // Komut kullanım zamanını güncelle
+    lastCommandTimes.set(commandKey, now);
+    
     console.log(`Command received: ${command} by ${message.author.tag}`);
     
     // Komutları işle
     if (command === 'ping') {
-      message.reply({ content: `Pong! Bot gecikmesi: ${client.ws.ping}ms` });
-    } else if (command === 'ticketkur' || command === 'ticketkurpaneli') {
+      message.reply({ 
+        content: `Pong! Bot gecikmesi: ${client.ws.ping}ms`,
+        allowedMentions: { parse: ['users'], everyone: false }
+      });
+    } else if (command === 'ticket' || command === 'ticketkur' || command === 'ticketkurpaneli') {
       await handleTicketKurCommand(message);
     // .ticket komutu kaldırıldı
     } else if (command === 'ticketlarım' || command === 'ticketlarim') {
@@ -1258,7 +1291,10 @@ client.on('messageCreate', async (message) => {
   } catch (error) {
     console.error('Error processing message:', error);
     try {
-      message.reply({ content: 'Komut işlenirken bir hata oluştu.' });
+      message.reply({ 
+        content: 'Komut işlenirken bir hata oluştu.',
+        allowedMentions: { parse: ['users'], everyone: false }
+      });
     } catch (replyError) {
       console.error('Error replying to message:', replyError);
     }
@@ -1356,7 +1392,8 @@ client.on('interactionCreate', async (interaction) => {
             reply: async (options) => {
               return await interaction.channel.send({
                 content: options.content || null,
-                embeds: options.embeds || null
+                embeds: options.embeds || null,
+                allowedMentions: { parse: ['users'], everyone: false }
               });
             }
           };
@@ -1396,11 +1433,14 @@ client.on('interactionCreate', async (interaction) => {
           // Son 25 mesajı ara
           const messages = await interaction.channel.messages.fetch({ limit: 25 });
           
-          // Filtrele: bot tarafından gönderilen + embed içeren + "Porsuk Support Ticket Sistemi" başlıklı
+          // Filtrele: bot tarafından gönderilen + embed içeren + ticket sistemine ait başlıklı
           const existingPanels = messages.filter(m => 
             m.author.id === client.user.id && 
             m.embeds.length > 0 && 
-            m.embeds[0].title === 'Porsuk Support Ticket Sistemi'
+            (m.embeds[0].title === '🎟️ Futbol RP Ticket Paneli' || 
+             m.embeds[0].title === '🎟️ Porsuk Support Ticket Sistemi' ||
+             m.embeds[0].title.includes('Ticket') ||
+             m.embeds[0].title.includes('ticket'))
           );
           
           if (existingPanels.size > 0) {
@@ -1422,7 +1462,8 @@ client.on('interactionCreate', async (interaction) => {
             // Yoksa yeni panel oluştur
             await interaction.channel.send({ 
               embeds: [embed], 
-              components: [row] 
+              components: [row],
+              allowedMentions: { parse: [], everyone: false }
             });
           }
         } catch (fetchError) {
@@ -1430,12 +1471,18 @@ client.on('interactionCreate', async (interaction) => {
           // Hata durumunda yeni panel oluştur
           await interaction.channel.send({ 
             embeds: [embed], 
-            components: [row] 
+            components: [row],
+            allowedMentions: { parse: [], everyone: false }
           });
         }
         
-        // Rol seçildikten sonra sadece kullanıcıya özel mesaj göster
-        await interaction.update({ content: `Panel oluşturuldu.`, components: [], ephemeral: true });
+        // İşlem tamamlandı, eğer halihazırda güncellenmişse hata almamak için
+        // silently continue - belki önceki interaction ile yapılmıştır
+        try {
+          await interaction.update({ content: `İşlem tamamlandı.`, components: [], ephemeral: true });
+        } catch (error) {
+          console.log('Update skipped - interaction may already be replied');
+        }
       }
     }
   } catch (error) {
