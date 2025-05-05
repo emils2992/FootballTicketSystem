@@ -898,10 +898,17 @@ async function handleTicketReply(modalInteraction: ModalSubmitInteraction, ticke
       await storage.assignTicket(ticketId, user.id);
     }
     
-    // Send the reply
-    await modalInteraction.reply({
-      content: `**${modalInteraction.user.username} yanıtladı:**\n${content}`
-    });
+    // Send the reply with more detailed formatting
+    // Check if the user is staff to show proper formatting
+    if (isStaff) {
+      await modalInteraction.reply({
+        content: `**👮‍♂️ ${modalInteraction.user.username} (Yetkili) yanıtladı:**\n\`\`\`${content}\`\`\``
+      });
+    } else {
+      await modalInteraction.reply({
+        content: `**👤 ${modalInteraction.user.username} yanıtladı:**\n\`\`\`${content}\`\`\``
+      });
+    }
     
   } catch (error) {
     log(`Error handling ticket reply: ${error}`, 'discord');
