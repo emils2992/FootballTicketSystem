@@ -52,7 +52,7 @@ export async function handleCommands(message: Message, prefix: string, client: C
   }
 }
 
-// Command: .ticketkur - Creates a ticket panel
+// Command: .ticketkur - Creates a ticket panel and sets up staff role
 async function handleTicketKurCommand(message: Message) {
   try {
     // Check if user has admin permission
@@ -60,41 +60,89 @@ async function handleTicketKurCommand(message: Message) {
       await message.reply('Bu komutu kullanmak için yönetici yetkisine sahip olmalısın!');
       return;
     }
-
-    // Create ticket panel embed
-    const guildId = message.guild?.id || 'default_guild';
-    const { embed, row } = await createTicketPanelEmbed(guildId);
-
-    // Send the panel
-    const panel = await message.channel.send({
-      embeds: [embed],
-      components: [row]
-    });
-
-    // Save the channel ID to database for future reference
-    if (message.guild?.id) {
-      await storage.updateBotSettings(message.guild.id, {
-        ticketChannelId: message.channel.id
-      });
-    }
-
-    // Delete the command message
-    if (message.deletable) {
-      await message.delete();
-    }
-
-    // Set up button interaction collectors
-    const collector = panel.createMessageComponentCollector();
     
-    collector.on('collect', async (interaction) => {
-      if (interaction.isButton()) {
-        await handleTicketButtonInteraction(interaction);
+    const args = message.content.split(' ').slice(1);
+    
+    // If no arguments provided, show syntax help
+    if (args.length === 0) {
+      await message.reply(
+        '**Ticket Sistemi Kurulum**\n\n' +
+        'Kullanım:\n' +
+        '`.ticketkur panel` - Ticket oluşturma panelini oluşturur\n' +
+        '`.ticketkur yetkili @rol` - Ticket kanallarına erişebilecek yetkili rolünü ayarlar'
+      );
+      return;
+    }
+    
+    const subCommand = args[0].toLowerCase();
+    
+    // Handle panel creation
+    if (subCommand === 'panel') {
+      // Create ticket panel embed
+      const guildId = message.guild?.id || 'default_guild';
+      const { embed, row } = await createTicketPanelEmbed(guildId);
+
+      // Send the panel
+      const panel = await message.channel.send({
+        embeds: [embed],
+        components: [row]
+      });
+
+      // Save the channel ID to database for future reference
+      if (message.guild?.id) {
+        await storage.updateBotSettings(message.guild.id, {
+          ticketChannelId: message.channel.id
+        });
       }
-    });
+
+      // Set up button interaction collectors
+      const collector = panel.createMessageComponentCollector();
+      
+      collector.on('collect', async (interaction) => {
+        if (interaction.isButton()) {
+          await handleTicketButtonInteraction(interaction);
+        }
+      });
+      
+      await message.reply('✅ Ticket paneli başarıyla oluşturuldu!');
+    }
+    // Handle staff role setup
+    else if (subCommand === 'yetkili') {
+      const roleId = args[1]?.match(/\d+/)?.[0];
+      
+      if (!roleId) {
+        await message.reply('Lütfen geçerli bir rol etiketleyin: `.ticketkur yetkili @rolismi`');
+        return;
+      }
+      
+      // Check if the role exists in the guild
+      const role = message.guild?.roles.cache.get(roleId);
+      if (!role) {
+        await message.reply('Belirtilen rol bulunamadı. Lütfen geçerli bir rol etiketleyin.');
+        return;
+      }
+      
+      // Save the staff role ID to database
+      if (message.guild?.id) {
+        await storage.updateBotSettings(message.guild.id, {
+          staffRoleId: roleId
+        });
+      }
+      
+      await message.reply(`✅ Yetkili rolü başarıyla \`@${role.name}\` olarak ayarlandı!`);
+    }
+    else {
+      await message.reply(
+        '**Geçersiz alt komut!**\n\n' +
+        'Kullanım:\n' +
+        '`.ticketkur panel` - Ticket oluşturma panelini oluşturur\n' +
+        '`.ticketkur yetkili @rol` - Ticket kanallarına erişebilecek yetkili rolünü ayarlar'
+      );
+    }
 
   } catch (error) {
     log(`Error in ticketkur command: ${error}`, 'discord');
-    await message.reply('Ticket paneli oluşturulurken bir hata oluştu!');
+    await message.reply('Ticket sistemi kurulurken bir hata oluştu!');
   }
 }
 
@@ -295,9 +343,12 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
         });
       }
       
-      // Update ticket with channel ID
-      await storage.updateBotSettings(modalInteraction.guild.id, {
-        channelId: channel.id
+      // Update ticket with channel ID in the ticket table, not bot settings
+      await storage.getTicketById(ticket.id).then(async (ticketData) => {
+        if (ticketData) {
+          // This will use the proper update method for tickets
+          await storage.updateTicketChannel(ticket.id, channel.id);
+        }
       });
       
       // Create ticket embed

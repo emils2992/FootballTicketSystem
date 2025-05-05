@@ -124,6 +124,14 @@ export const storage = {
       .returning();
     return ticket;
   },
+  
+  async updateTicketChannel(ticketId: number, channelId: string) {
+    const [ticket] = await db.update(schema.tickets)
+      .set({ channelId })
+      .where(eq(schema.tickets.id, ticketId))
+      .returning();
+    return ticket;
+  },
 
   async getOpenTickets() {
     return await db.query.tickets.findMany({
