@@ -615,7 +615,7 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
               footer: {
                 text: footerQuotes[Math.floor(Math.random() * footerQuotes.length)]
               },
-              description: null
+              description: ""
             }
           ],
           components: rows // Multiple rows are already in raw JSON format for Discord.js

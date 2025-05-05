@@ -61,6 +61,7 @@ export const botSettings = pgTable("bot_settings", {
   logChannelId: text("log_channel_id"),
   adminRoleId: text("admin_role_id"),
   staffRoleId: text("staff_role_id"),
+  lastTicketNumber: integer("last_ticket_number").default(0), // Son ticket numarası - sunucu başına takip edilecek
   lastUpdated: timestamp("last_updated").defaultNow().notNull(),
 });
 
