@@ -548,10 +548,68 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
           messageContent += `\n<@&${staffRoleId}>, yeni bir ticket açıldı!`;
         }
         
+        // Futbol temalı karşılama mesajı
+        const welcomeMessages = [
+          `⚽ **HOŞGELDİN!** ${modalInteraction.user.username} kardeşim, taleplerin bizim için altın değerinde!`,
+          `🏆 **SELAM ŞAMPIYON!** ${modalInteraction.user.username}, seni görmek harika. Transfer talebine bakacağız!`,
+          `🥅 **GOL GELİYOR!** ${modalInteraction.user.username} sahaya çıktı, şimdi talebin için sizinleyiz!`,
+          `🏟️ **STADYUMA HOŞGELDİN!** ${modalInteraction.user.username}, Futbol RP ailesinin yeni yıldızı!`,
+          `⚽ **MAÇA HAZIR OL!** ${modalInteraction.user.username}, sıkı dur çünkü her talebini önemsiyoruz!`
+        ];
+        
+        // Unutulmaz futbol anları
+        const footerQuotes = [
+          `"Futbol hayattır!" - Fatih Terim`,
+          `"Bana güveniyorsan, yemyeşil sahalarda mücadele etmeyi asla bırakma!" - Alex de Souza`,
+          `"Tek başına hızlı gidersin, birlikte daha uzağa gidersin." - Cristiano Ronaldo`,
+          `"Şampiyon olmak için önce hayal etmek gerekir!" - Pep Guardiola`,
+          `"Her maçta aynı tutkuyla oynayacaksın, sanki finalmiş gibi!" - Kobe Bryant`,
+          `"Şampiyonlar Ligi tarihimizdeki en büyük kupa!" - Arda Turan`,
+          `"Futbolcular gelir, gider ama taraftarlar kulübün gerçek kahramanlarıdır." - Hasan Şaş`,
+          `"Kazanırsak beraber kazanırız, kaybedersek ben kaybederim." - Jose Mourinho`,
+          `"Hayat futbol gibidir, bazen beklenmedik goller yersin." - Ronaldinho`,
+          `"AĞĞĞĞĞ GOOOOLLL GOOOOLLL MUHTEŞEM GOL LAMPARD'DAN!" - Mehmet Demirkol`
+        ];
+        
+        // Rastgele karşılama mesajı seç
+        const randomIndex = Math.floor(Math.random() * welcomeMessages.length);
+        const welcomeMessage = welcomeMessages[randomIndex];
+        
+        // Rastgele futbol fotoğrafı URL'si
+        const footballImages = [
+          "https://media.api-sports.io/football/teams/541.png", // Real Madrid
+          "https://media.api-sports.io/football/teams/529.png", // Barcelona
+          "https://media.api-sports.io/football/teams/496.png", // Juventus
+          "https://media.api-sports.io/football/teams/85.png",  // PSG
+          "https://media.api-sports.io/football/teams/165.png", // Dortmund
+          "https://media.api-sports.io/football/teams/50.png",  // Manchester City 
+          "https://media.api-sports.io/football/teams/33.png",  // Manchester United
+          "https://media.api-sports.io/football/teams/40.png",  // Liverpool
+          "https://media.api-sports.io/football/teams/157.png", // Bayern Münih
+          "https://media.api-sports.io/football/teams/6195.png" // Türkiye
+        ];
+        
+        // Rastgele futbol fotoğrafı seç
+        const randomImageIndex = Math.floor(Math.random() * footballImages.length);
+        const footballImage = footballImages[randomImageIndex];
+        
         // Construct a message mentioning the user and convert rows to proper message components
         const messageOptions = {
           content: messageContent,
-          embeds: [embed],
+          embeds: [
+            embed,
+            {
+              title: welcomeMessage,
+              color: 0x3498db,
+              image: {
+                url: footballImage
+              },
+              footer: {
+                text: footerQuotes[Math.floor(Math.random() * footerQuotes.length)]
+              },
+              description: `🎵 **Şampiyonlar Ligi marşı çalıyor!** 🎵\n[Şampiyonlar Ligi marşını dinlemek için tıkla](https://www.youtube.com/watch?v=0Qqd6T_A9LY)`
+            }
+          ],
           components: rows // Multiple rows are already in raw JSON format for Discord.js
         };
         
