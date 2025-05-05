@@ -6,18 +6,18 @@ import { log } from '../vite';
  * Sadece yüksek kaliteli görsel, metin yok
  */
 export function getWelcomeImage(): string {
-  // Futbol temalı, yüksek çözünürlüklü stadyum görselleri
+  // Futbol temalı, yüksek çözünürlüklü stadyum görselleri - Discord CDN kullanarak
   const welcomeImages = [
-    "https://i.imgur.com/3C4Fmx0.jpg", // Allianz Arena - Bayern Münih Stadyumu - Gece mavi/kırmızı
-    "https://i.imgur.com/PQPbztN.jpg", // Camp Nou - Barcelona Stadyumu - Geniş açı
-    "https://i.imgur.com/P3qIls6.jpg", // Santiago Bernabéu - Real Madrid Stadyumu - Panoramik
-    "https://i.imgur.com/Xmq3G9i.jpg", // Old Trafford - Manchester United Stadyumu - İç görünüm
-    "https://i.imgur.com/Z9UQTsq.jpg", // Wembley Stadyumu - Finaller için büyük stadyum panorama
-    "https://i.imgur.com/2hXvyI3.jpg", // Şampiyonlar Ligi Finali - Konfeti ve kupa seremonisi
-    "https://i.imgur.com/iI3OWyk.jpg", // Anfield - Liverpool stadyumu gece görünümü 
-    "https://i.imgur.com/6IOOY0n.jpg", // Türk Milli Takımı - Stadyum ve Türk bayrağı
-    "https://i.imgur.com/S3syhTq.jpg", // Olimpiyat Stadyumu - Kalabalık tribünler ve yeşil saha
-    "https://i.imgur.com/s7GCHBD.jpg"  // San Siro - Milan Stadyumu - Gece görünümü
+    "https://cdn.discordapp.com/attachments/1107887798536056946/1239612736045764688/bayernstadium.jpg", // Allianz Arena
+    "https://cdn.discordapp.com/attachments/1107887798536056946/1239612736309968998/campnou.jpg", // Camp Nou
+    "https://cdn.discordapp.com/attachments/1107887798536056946/1239612736557256705/santiagobernabeu.jpg", // Santiago Bernabéu
+    "https://cdn.discordapp.com/attachments/1107887798536056946/1239612736842244176/oldtrafford.jpg", // Old Trafford
+    "https://cdn.discordapp.com/attachments/1107887798536056946/1239612737081139330/wembley.jpg", // Wembley
+    "https://cdn.discordapp.com/attachments/1107887798536056946/1239612737336823935/championsleague.jpg", // Şampiyonlar Ligi
+    "https://cdn.discordapp.com/attachments/1107887798536056946/1239612737600995428/anfield.jpg", // Anfield
+    "https://cdn.discordapp.com/attachments/1107887798536056946/1239612737865142292/turkishfootball.jpg", // Türk Milli Takımı
+    "https://cdn.discordapp.com/attachments/1107887798536056946/1239612738154332190/olympicstadium.jpg", // Olimpiyat Stadyumu
+    "https://cdn.discordapp.com/attachments/1107887798536056946/1239612738427117661/sansiro.jpg"  // San Siro
   ];
   
   // Rastgele stadyum görseli seç

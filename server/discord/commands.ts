@@ -27,7 +27,7 @@ import {
   createTicketListEmbed,
   createTicketLogEmbed
 } from './embeds';
-import { getWelcomeImage } from './welcome-card';
+//import { getWelcomeImage } from './welcome-card';
 
 // Handle all message commands
 export async function handleCommands(message: Message, prefix: string, client: Client) {
@@ -469,22 +469,18 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
     
     // Create a private ticket channel
     if (modalInteraction.guild) {
-      // Get staff role ID from settings
+      // Get settings from database for staff role and ticket numbering
       const guildSettings = await storage.getBotSettings(modalInteraction.guild.id);
       const staffRoleId = guildSettings?.staffRoleId;
       
-      // Kanal ismi için ticket sayısını al
-      let ticketNumber = 1;
-      try {
-        // Sunucudaki ticket- ile başlayan kanalları say
-        const ticketChannels = modalInteraction.guild.channels.cache.filter(
-          ch => ch.name.startsWith('ticket-')
-        );
-        // Kanal sayısına 1 ekle
-        ticketNumber = ticketChannels.size + 1;
-      } catch (error) {
-        log(`Ticket numarası hesaplanırken hata: ${error}`, 'discord');
-      }
+      // Sunucu için son ticket numarasını alarak 1 arttır
+      const lastTicketNumber = (guildSettings?.lastTicketNumber || 0);
+      const ticketNumber = lastTicketNumber + 1;
+      
+      // Sunucu ayarlarında son ticket numarasını güncelle
+      await storage.updateBotSettings(modalInteraction.guild.id, {
+        lastTicketNumber: ticketNumber
+      });
       
       // Sayısal formatta kanal adı oluştur
       const channelName = `ticket-${ticketNumber}`;
@@ -549,74 +545,13 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
           messageContent += `\n<@&${staffRoleId}>, yeni bir ticket açıldı!`;
         }
         
-        // Futbol temalı karşılama mesajı
-        const welcomeMessages = [
-          `⚽ **HOŞGELDİN!** ${modalInteraction.user.username} kardeşim, taleplerin bizim için altın değerinde!`,
-          `🏆 **SELAM ŞAMPIYON!** ${modalInteraction.user.username}, seni görmek harika. Transfer talebine bakacağız!`,
-          `🥅 **GOL GELİYOR!** ${modalInteraction.user.username} sahaya çıktı, şimdi talebin için sizinleyiz!`,
-          `🏟️ **STADYUMA HOŞGELDİN!** ${modalInteraction.user.username}, Futbol RP ailesinin yeni yıldızı!`,
-          `⚽ **MAÇA HAZIR OL!** ${modalInteraction.user.username}, sıkı dur çünkü her talebini önemsiyoruz!`
-        ];
-        
-        // Unutulmaz futbol anları
-        const footerQuotes = [
-          `"Futbol hayattır!" - Fatih Terim`,
-          `"Bana güveniyorsan, yemyeşil sahalarda mücadele etmeyi asla bırakma!" - Alex de Souza`,
-          `"Tek başına hızlı gidersin, birlikte daha uzağa gidersin." - Cristiano Ronaldo`,
-          `"Şampiyon olmak için önce hayal etmek gerekir!" - Pep Guardiola`,
-          `"Her maçta aynı tutkuyla oynayacaksın, sanki finalmiş gibi!" - Kobe Bryant`,
-          `"Şampiyonlar Ligi tarihimizdeki en büyük kupa!" - Arda Turan`,
-          `"Futbolcular gelir, gider ama taraftarlar kulübün gerçek kahramanlarıdır." - Hasan Şaş`,
-          `"Kazanırsak beraber kazanırız, kaybedersek ben kaybederim." - Jose Mourinho`,
-          `"Hayat futbol gibidir, bazen beklenmedik goller yersin." - Ronaldinho`,
-          `"AĞĞĞĞĞ GOOOOLLL GOOOOLLL MUHTEŞEM GOL LAMPARD'DAN!" - Mehmet Demirkol`
-        ];
-        
-        // Rastgele karşılama mesajı seç
-        const randomIndex = Math.floor(Math.random() * welcomeMessages.length);
-        const welcomeMessage = welcomeMessages[randomIndex];
-        
-        // Stadyum arka planlı muhteşem futbol görselleri
-        const footballImages = [
-          "https://i.imgur.com/trhpYiG.jpg", // Santiago Bernabeu Stadyumu gece görünümü
-          "https://i.imgur.com/56UdOZK.jpg", // Camp Nou Stadyumu panoramik görünüm
-          "https://i.imgur.com/Wx6xDQa.jpg", // Anfield Stadyumu maç günü atmosferi
-          "https://i.imgur.com/o1dtrGx.jpg", // Old Trafford gece maçı görüntüsü
-          "https://i.imgur.com/T28Ju5d.jpg", // Allianz Arena renkli ışıklandırma
-          "https://i.imgur.com/Fqm4X8J.jpg", // Şampiyonlar Ligi finali atmosferi
-          "https://i.imgur.com/IhUQqbG.jpg", // Stadyum içi büyük pankart ve taraftar
-          "https://i.imgur.com/0Wbh5gB.jpg", // Wembley stadyumu final maçı
-          "https://i.imgur.com/JczRb7h.jpg", // Türk bayrağı ve stadyum
-          "https://i.imgur.com/sRJXQif.jpg"  // Muhteşem gol sevinci ve stadyum
-        ];
-        
-        // Rastgele futbol fotoğrafı seç
-        const randomImageIndex = Math.floor(Math.random() * footballImages.length);
-        const footballImage = footballImages[randomImageIndex];
-        
-        // Yüksek kaliteli stadyum fotoğrafı al
-        const welcomeImage = getWelcomeImage();
 
-        // Construct a message mentioning the user and convert rows to proper message components
+        
+        // Ticket oluşturuldu mesajı için basit embed
         const messageOptions = {
           content: messageContent,
           embeds: [
-            embed,
-            {
-              title: welcomeMessage,
-              color: 0x3498db,
-              image: {
-                url: welcomeImage
-              },
-              author: {
-                name: `${modalInteraction.user.username} - Yeni Ticket Açıldı!`,
-                icon_url: modalInteraction.user.displayAvatarURL({ size: 64 })
-              },
-              footer: {
-                text: footerQuotes[Math.floor(Math.random() * footerQuotes.length)]
-              },
-              description: ""
-            }
+            embed
           ],
           components: rows // Multiple rows are already in raw JSON format for Discord.js
         };
@@ -629,8 +564,7 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
         
         // Ticket açılış bildirimi gönderme (log kanalına)
         try {
-          // Sunucudaki log kanalı ID'sini veritabanından al
-          const guildSettings = await storage.getBotSettings(modalInteraction.guild.id);
+          // Log kanalı ID'sini alınan guild settings'ten kullan
           const logChannelId = guildSettings?.logChannelId;
           
           // Log kanalı varsa bildirim gönder
@@ -879,7 +813,30 @@ async function handleTicketLogCommand(message: Message, args: string[]) {
         }
       } else {
         // Eğer kanal etiketi değilse normal sayı olarak dene
-        ticketId = parseInt(args[0]);
+        const inputId = parseInt(args[0]);
+        if (!isNaN(inputId)) {
+          ticketId = inputId;
+        } else {
+          // Eğer kanal adı yazıldıysa (örn: ticket-5)
+          if (args[0].startsWith('ticket-')) {
+            // Kanal adından numarayı çıkar
+            const ticketNumber = args[0].replace('ticket-', '');
+            const ticketNumberInt = parseInt(ticketNumber);
+            if (!isNaN(ticketNumberInt)) {
+              // Kanal adına göre kanalı bul
+              const channel = message.guild?.channels.cache.find(ch => ch.name === args[0]);
+              if (channel) {
+                const ticketData = await storage.getTicketByChannelId(channel.id);
+                if (ticketData) {
+                  ticketId = ticketData.id;
+                }
+              } else {
+                await message.reply(`Sunucuda '${args[0]}' adında bir kanal bulunamadı!`);
+                return;
+              }
+            }
+          }
+        }
       }
     } else {
       // If no ID provided, check if the command is used in a ticket channel
