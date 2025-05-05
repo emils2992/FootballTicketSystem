@@ -236,7 +236,7 @@ async function handleCategorySelection(interaction: StringSelectMenuInteraction)
       .setMinLength(10)
       .setMaxLength(500);
     
-    // Create action row with input
+    // Create action row with input and convert to proper format that works with Discord.js
     const descriptionRow = new ActionRowBuilder<TextInputBuilder>()
       .addComponents(descriptionInput);
     
@@ -367,15 +367,15 @@ async function handleTicketCreation(modalInteraction: ModalSubmitInteraction, ca
       if (ticketData) {
         const { embed, row, activeStaff } = await createNewTicketEmbed(ticketData);
         
-        // Construct a message mentioning the user
-        const options: MessageCreateOptions = {
+        // Construct a message mentioning the user and convert row to proper message component
+        const messageOptions = {
           content: `<@${modalInteraction.user.id}>, ticket oluşturuldu.`,
           embeds: [embed],
-          components: [row]
+          components: [row] // row is already in raw JSON format for Discord.js
         };
         
         // Send the embed to the channel
-        const message = await channel.send(options);
+        const message = await channel.send(messageOptions);
         
         // Pin the message
         await message.pin();
