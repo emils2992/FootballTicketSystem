@@ -375,6 +375,16 @@ const storage = {
       .filter(user => user.is_staff && new Date(user.last_active) > new Date(Date.now() - 24 * 60 * 60 * 1000));
   },
   
+  async getOpenTickets() {
+    // Hafızadaki açık ticketları döndür (kapalı olmayanlar)
+    // Ticket statüsleri: pending, accepted, rejected, closed
+    const openTickets = Array.from(memoryStorage.tickets.values())
+      .filter(ticket => ticket.status !== 'closed')
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // En yeniden eskiye sırala
+    
+    return openTickets;
+  },
+  
   async getNextTicketNumber(guildId) {
     // Önce botSettings'den son numarayı kontrol et
     const settings = await this.getBotSettings(guildId);
@@ -840,7 +850,7 @@ async function handleTicketCreation(message, categoryId, description) {
         type: 'GUILD_TEXT',
         permissionOverwrites: [
           {
-            id: guild.id, // @everyone - Kanalı kimsenin görmemesini sağla
+            id: guild.id, // @everyone - Kanalı KESİNLİKLE kimsenin görmemesini sağla
             deny: [Permissions.FLAGS.VIEW_CHANNEL, Permissions.FLAGS.SEND_MESSAGES]
           },
           {
@@ -853,10 +863,29 @@ async function handleTicketCreation(message, categoryId, description) {
           },
           {
             id: client.user.id, // Bot kendisi
-            allow: [Permissions.FLAGS.VIEW_CHANNEL, Permissions.FLAGS.SEND_MESSAGES, Permissions.FLAGS.READ_MESSAGE_HISTORY]
+            allow: [Permissions.FLAGS.VIEW_CHANNEL, Permissions.FLAGS.SEND_MESSAGES, Permissions.FLAGS.READ_MESSAGE_HISTORY, Permissions.FLAGS.MANAGE_CHANNELS]
           }
         ]
       });
+      
+      // Kanal oluşturulduktan sonra izinleri doğrula (kesinlikle @everyone izinlerini kapat)
+      try {
+        // @everyone rolüne izinleri kesinlikle kapattığımızdan emin olalım
+        const everyonePerms = ticketChannel.permissionOverwrites.cache.get(guild.id);
+        
+        if (!everyonePerms || !everyonePerms.deny.has(Permissions.FLAGS.VIEW_CHANNEL)) {
+          console.log(`${channelName} için @everyone izinleri tekrar düzeltiliyor...`);
+          
+          // İzinleri açıkça reddet
+          await ticketChannel.permissionOverwrites.edit(guild.id, {
+            VIEW_CHANNEL: false,
+            SEND_MESSAGES: false
+          });
+        }
+      } catch (permError) {
+        console.error("İzinleri doğrulama hatası:", permError);
+        // Hata olsa bile devam et
+      }
       
       // Ticket'ı veritabanına kaydet
       const ticketData = {
@@ -1865,6 +1894,15 @@ client.once('ready', async () => {
     }
     
     console.log('Bot ayarları başarıyla yüklendi.');
+    
+    // Açık ticket kanallarını kontrol et ve izinleri düzelt
+    await checkAndFixTicketPermissions();
+    
+    // 1 saat aralıklarla tüm ticket kanalların izinlerini yeniden kontrol etmek için interval ayarla
+    setInterval(async () => {
+      console.log('Periyodik ticket izinleri kontrol ediliyor...');
+      await checkAndFixTicketPermissions();
+    }, 60 * 60 * 1000); // 1 saatte bir kontrol et
   } catch (error) {
     console.error('Bot ayarları yüklenirken hata oluştu:', error);
   }
@@ -1882,6 +1920,121 @@ client.on('error', (error) => {
 client.on('warn', (warning) => {
   console.warn('Discord client warning:', warning);
 });
+
+// Aktif ticket kanallarını kontrol edip izinleri düzelt
+async function checkAndFixTicketPermissions() {
+  console.log('Tüm açık ticket kanallarının izinleri kontrol ediliyor...');
+  
+  try {
+    // Tüm sunucuları ve ticket kanallarını kontrol et
+    const guilds = client.guilds.cache.values();
+    
+    // Her sunucu için ticket kanallarını bul
+    for (const guild of guilds) {
+      console.log(`Sunucu ID ${guild.id} (${guild.name}) kontrol ediliyor...`);
+      
+      // Ticket kanallarını bul ("ticket-" ile başlayan kanallar)
+      const ticketChannels = guild.channels.cache.filter(channel => 
+        channel.type === 'GUILD_TEXT' && 
+        channel.name.startsWith('ticket-')
+      );
+      
+      if (ticketChannels.size === 0) {
+        console.log(`${guild.name} sunucusunda ticket kanalı bulunamadı.`);
+        continue;
+      }
+      
+      console.log(`${guild.name} sunucusunda ${ticketChannels.size} ticket kanalı bulundu. İzinler kontrol ediliyor...`);
+      
+      // Yetkili rolünü bul
+      const staffRoleId = memoryStorage.staffRoles.get(guild.id) || 
+                        (await storage.getBotSettings(guild.id)).staff_role_id;
+      
+      if (!staffRoleId) {
+        console.log(`${guild.name} sunucusu için yetkili rolü bulunamadı! İzinler tam düzeltilemeyebilir.`);
+      } else {
+        console.log(`${guild.name} sunucusu için yetkili rolü ID: ${staffRoleId}`);
+      }
+      
+      // Her ticket kanalı için izinleri düzelt
+      let fixedCount = 0;
+      let errorCount = 0;
+      
+      for (const [channelId, channel] of ticketChannels) {
+        try {
+          console.log(`Kanal "${channel.name}" için izinler kontrol ediliyor...`);
+          
+          // @everyone rolüne VIEW_CHANNEL iznini reddet (kesinlikle!)
+          const everyoneRole = guild.roles.everyone;
+          
+          // Mevcut izinleri kontrol et
+          const everyonePerms = channel.permissionOverwrites.cache.get(everyoneRole.id);
+          
+          if (!everyonePerms || !everyonePerms.deny.has(Permissions.FLAGS.VIEW_CHANNEL)) {
+            console.log(`Kanal "${channel.name}" için @everyone için VIEW_CHANNEL izni kısıtlanmamış! Düzeltiliyor...`);
+            
+            // @everyone için VIEW_CHANNEL iznini açıkça reddet
+            await channel.permissionOverwrites.edit(everyoneRole, {
+              VIEW_CHANNEL: false,
+              SEND_MESSAGES: false
+            });
+            
+            // Bota tüm izinleri ver
+            await channel.permissionOverwrites.edit(client.user.id, {
+              VIEW_CHANNEL: true,
+              SEND_MESSAGES: true,
+              READ_MESSAGE_HISTORY: true,
+              MANAGE_CHANNELS: true
+            });
+            
+            // Yetkili rolüne izin ver (eğer varsa)
+            if (staffRoleId) {
+              await channel.permissionOverwrites.edit(staffRoleId, {
+                VIEW_CHANNEL: true,
+                SEND_MESSAGES: true,
+                READ_MESSAGE_HISTORY: true,
+                MANAGE_MESSAGES: true
+              });
+            }
+            
+            // İlgili kullanıcıyı bul - isimden ticket numarasını çıkar
+            const ticketMatch = channel.name.match(/ticket-(\d+)/);
+            if (ticketMatch && ticketMatch[1]) {
+              // Ticket numarasından ticketı bul
+              const ticketNumber = parseInt(ticketMatch[1]);
+              const tickets = Array.from(memoryStorage.tickets.values());
+              const ticket = tickets.find(t => t.number === ticketNumber);
+              
+              if (ticket && ticket.user_discord_id) {
+                // Kullanıcı bulunduysa, kanala erişim izni ver
+                await channel.permissionOverwrites.edit(ticket.user_discord_id, {
+                  VIEW_CHANNEL: true,
+                  SEND_MESSAGES: true,
+                  READ_MESSAGE_HISTORY: true
+                });
+                console.log(`Kanal "${channel.name}" için ticket açan kullanıcıya izinler verildi.`);
+              }
+            }
+            
+            fixedCount++;
+            console.log(`Kanal "${channel.name}" izinleri düzeltildi.`);
+          } else {
+            console.log(`Kanal "${channel.name}" izinleri zaten doğru ayarlanmış.`);
+          }
+        } catch (channelError) {
+          errorCount++;
+          console.error(`Kanal "${channel.name}" izinleri düzeltilirken hata oluştu:`, channelError);
+        }
+      }
+      
+      console.log(`${guild.name} sunucusunda izin kontrolü tamamlandı: ${fixedCount} kanal düzeltildi, ${errorCount} kanalda hata oluştu.`);
+    }
+    
+    console.log('Tüm sunucularda izin kontrolü tamamlandı.');
+  } catch (error) {
+    console.error('Ticket izinleri kontrol edilirken genel hata oluştu:', error);
+  }
+}
 
 // Discord botunu başlat
 client.login(process.env.DISCORD_TOKEN).catch(err => {
