@@ -94,19 +94,47 @@ const storage = {
   async getBotSettings(guildId) {
     let settings = memoryStorage.botSettings.get(guildId);
     if (!settings) {
-      settings = { guild_id: guildId, prefix: '.', last_ticket_number: 0 };
+      settings = { 
+        guild_id: guildId, 
+        prefix: '.', 
+        last_ticket_number: 0,
+        staff_role_id: null // Yetkili rolünü botSettings içinde saklayalım
+      };
       memoryStorage.botSettings.set(guildId, settings);
     }
     return settings;
   },
   
   async setStaffRole(guildId, roleId) {
+    // Hem hafızada hem de botSettings içinde saklayalım
     memoryStorage.staffRoles.set(guildId, roleId);
+    
+    // BotSettings içindeki staff_role_id'yi güncelle
+    let settings = await this.getBotSettings(guildId);
+    settings.staff_role_id = roleId;
+    memoryStorage.botSettings.set(guildId, settings);
+    
+    console.log(`Yetkili rolü ayarlandı: ${roleId} (Guild: ${guildId})`);
     return roleId;
   },
   
   async getStaffRole(guildId) {
-    return memoryStorage.staffRoles.get(guildId);
+    // Önce hafızadan kontrol et
+    let roleId = memoryStorage.staffRoles.get(guildId);
+    
+    // Eğer yoksa, botSettings'den almayı dene
+    if (!roleId) {
+      const settings = await this.getBotSettings(guildId);
+      roleId = settings.staff_role_id;
+      
+      // Eğer botSettings'de varsa hafızaya al
+      if (roleId) {
+        memoryStorage.staffRoles.set(guildId, roleId);
+        console.log(`Yetkili rolü botSettings'den yüklendi: ${roleId} (Guild: ${guildId})`);
+      }
+    }
+    
+    return roleId;
   },
   
   async getAllCategories() {
@@ -348,20 +376,27 @@ const storage = {
   },
   
   async getNextTicketNumber(guildId) {
-    // Get or create ticket number for guild
-    let ticketNumber = memoryStorage.lastTicketNumbers.get(guildId) || 0;
-    
-    // Increment
-    ticketNumber++;
-    
-    // Save back
-    memoryStorage.lastTicketNumbers.set(guildId, ticketNumber);
-    
-    // Update bot settings
+    // Önce botSettings'den son numarayı kontrol et
     const settings = await this.getBotSettings(guildId);
-    settings.last_ticket_number = ticketNumber;
     
-    return ticketNumber;
+    // Hafızadaki numara veya botSettings'teki numarayı al (hangisi daha yüksekse)
+    let memoryNumber = memoryStorage.lastTicketNumbers.get(guildId) || 0;
+    let settingsNumber = settings.last_ticket_number || 0;
+    
+    // En son kullanılan ticket numarasını bul (hangisi daha büyükse)
+    let lastNumber = Math.max(memoryNumber, settingsNumber);
+    
+    // Bir sonraki numaraya geç
+    lastNumber++;
+    
+    // Her iki yerde de güncelle
+    memoryStorage.lastTicketNumbers.set(guildId, lastNumber);
+    settings.last_ticket_number = lastNumber;
+    memoryStorage.botSettings.set(guildId, settings);
+    
+    console.log(`Sunucu ${guildId} için yeni ticket numarası: ${lastNumber}`);
+    
+    return lastNumber;
   }
 };
 
@@ -559,7 +594,7 @@ async function handleTicketKurCommand(message) {
   
   try {
     // Sunucudaki roller
-    const roles = message.guild.roles.cache.filter(role => 
+    let roles = message.guild.roles.cache.filter(role => 
       !role.managed && role.id !== message.guild.id
     ).map(role => {
       return {
@@ -568,6 +603,15 @@ async function handleTicketKurCommand(message) {
         description: `ID: ${role.id}`
       };
     }).slice(0, 25); // Discord 25'ten fazla seçeneğe izin vermiyor
+    
+    // Eğer hiç rol bulunmadıysa @everyone rolünü ekle
+    if (roles.length === 0) {
+      roles = [{
+        label: '@everyone (Varsayılan)', 
+        value: message.guild.id,
+        description: 'Sunucudaki herkes'
+      }];
+    }
     
     // Seçim menüsü
     const selectMenu = new MessageSelectMenu()
@@ -671,7 +715,15 @@ async function handleTicketCommand(message) {
     const categories = await storage.getAllCategories();
     
     if (categories.length === 0) {
-      return message.reply({ content: 'Henüz hiç ticket kategorisi yapılandırılmamış.' });
+      // Kategori yoksa, default bir tane oluştur
+      const defaultCategory = {
+        id: 1,
+        name: "Destek", 
+        emoji: "🎫", 
+        description: "Genel destek talebi"
+      };
+      memoryStorage.categories.set(defaultCategory.id, defaultCategory);
+      categories.push(defaultCategory);
     }
     
     // SelectMenu oluştur
@@ -679,14 +731,26 @@ async function handleTicketCommand(message) {
       .setCustomId('ticket_category')
       .setPlaceholder('Bir kategori seçin...');
     
-    categories.forEach(category => {
+    // Kategori seçeneklerini ekle
+    const options = categories.map(category => ({
+      label: category.name,
+      value: category.id.toString(),
+      description: category.description || 'Açıklama yok',
+      emoji: category.emoji
+    }));
+    
+    // Discord options seçenekleri 1-25 arasında olmalı
+    if (options.length > 0) {
+      selectMenu.addOptions(options);
+    } else {
+      // Hiç kategori yoksa varsayılan bir seçenek ekle
       selectMenu.addOptions([{
-        label: category.name,
-        value: category.id.toString(),
-        description: category.description || 'Açıklama yok',
-        emoji: category.emoji
+        label: "Genel Destek",
+        value: "1",
+        description: "Destek talebi oluştur",
+        emoji: "🎫"
       }]);
-    });
+    }
     
     const row = new MessageActionRow().addComponents(selectMenu);
     
@@ -1027,215 +1091,457 @@ async function acceptTicket(interaction) {
 
 async function rejectTicket(interaction) {
   try {
-    // v13'te kullanıcıdan red nedeni isteyeceğiz
-    await interaction.reply({ 
-      content: 'Lütfen reddetme nedeninizi yazın:', 
-      ephemeral: true 
+    // Kanal kontrolü yapın
+    if (!interaction.channel) {
+      console.log("Reject ticket attempted on a non-existent channel");
+      return; // Kanal yoksa hiçbir şey yapma
+    }
+    
+    // Ticket'ı bul (erken dönem kontrolü)
+    const ticketInfo = await storage.getTicketByChannelId(interaction.channel.id).catch(err => {
+      console.error("Error fetching ticket info:", err);
+      return null;
     });
     
-    const filter = m => m.author.id === interaction.user.id && m.channelId === interaction.channel.id;
+    if (!ticketInfo) {
+      try {
+        await interaction.reply({ 
+          content: 'Ticket bilgisi bulunamadı veya bu kanal bir ticket kanalı değil.', 
+          ephemeral: true 
+        });
+      } catch (replyError) {
+        console.error('Reply error on non-existent ticket:', replyError);
+      }
+      return;
+    }
     
     try {
-      const collected = await interaction.channel.awaitMessages({
-        filter,
-        max: 1,
-        time: 60000,
-        errors: ['time']
+      // v13'te kullanıcıdan red nedeni isteyeceğiz
+      await interaction.reply({ 
+        content: 'Lütfen reddetme nedeninizi yazın:', 
+        ephemeral: true 
       });
       
-      const rejectReason = collected.first().content;
+      const filter = m => m.author.id === interaction.user.id && m.channelId === interaction.channel.id;
       
-      // Ticket'ı bul
-      const ticketInfo = await storage.getTicketByChannelId(interaction.channel.id);
-      
-      if (!ticketInfo) {
-        return interaction.followUp({ content: 'Ticket bilgisi bulunamadı.' });
-      }
-      
-      // Ticket'ı reddet
-      await storage.rejectTicket(ticketInfo.id, rejectReason);
-      
-      // Kullanıcıya DM gönder
       try {
-        const ticketUser = await client.users.fetch(ticketInfo.user_discord_id);
+        const collected = await interaction.channel.awaitMessages({
+          filter,
+          max: 1,
+          time: 60000,
+          errors: ['time']
+        });
         
-        if (ticketUser) {
-          const dmEmbed = new MessageEmbed()
-            .setColor('#ED4245') // Discord red
-            .setTitle('❌ Ticketınız Reddedildi')
-            .setDescription(`Ticketınız yetkili tarafından reddedildi.`)
-            .addField('📂 Kategori:', `${ticketInfo.category_emoji || '📌'} ${ticketInfo.category_name || 'Genel Kategori'}`, false)
-            .addField('⛔ Red Nedeni:', rejectReason, false)
-            .addField('👮‍♂️ Reddeden Yetkili:', `${interaction.user.username}`, false)
-            .setFooter({ text: `Ticket ID: ${ticketInfo.id}` })
-            .setTimestamp();
+        // Mesaj alındıysa devam et
+        if (collected.first()) {
+          const rejectReason = collected.first().content;
           
-          await ticketUser.send({ embeds: [dmEmbed] }).catch(error => {
-            console.error('Could not send DM:', error);
+          // Ticket'ı reddet
+          await storage.rejectTicket(ticketInfo.id, rejectReason).catch(err => {
+            console.error("Error rejecting ticket in DB:", err);
+            throw new Error("Ticket veritabanında reddedilemedi");
           });
+          
+          // Kullanıcıya DM gönder
+          try {
+            const ticketUser = await client.users.fetch(ticketInfo.user_discord_id).catch(err => {
+              console.error("Error fetching user:", err);
+              return null;
+            });
+            
+            if (ticketUser) {
+              const dmEmbed = new MessageEmbed()
+                .setColor('#ED4245') // Discord red
+                .setTitle('❌ Ticketınız Reddedildi')
+                .setDescription(`Ticketınız yetkili tarafından reddedildi.`)
+                .addField('📂 Kategori:', `${ticketInfo.category_emoji || '📌'} ${ticketInfo.category_name || 'Genel Kategori'}`, false)
+                .addField('⛔ Red Nedeni:', rejectReason, false)
+                .addField('👮‍♂️ Reddeden Yetkili:', `${interaction.user.username}`, false)
+                .setFooter({ text: `Ticket ID: ${ticketInfo.id}` })
+                .setTimestamp();
+              
+              // DM gönderme hatası kapatılmasın
+              ticketUser.send({ embeds: [dmEmbed] }).catch(error => {
+                console.error('Could not send DM:', error);
+              });
+            }
+          } catch (dmError) {
+            console.error('DM send error:', dmError);
+            // DM gönderilmezse kanalda devam et
+          }
+          
+          // Sadece işlemi gerçekleştiren yetkiliye özel bildirim - güvenli bir şekilde deneyin
+          try {
+            await interaction.followUp({ content: `❌ Ticket reddedildi.`, ephemeral: true });
+          } catch (followUpError) {
+            console.error('Could not follow up:', followUpError);
+          }
+          
+          // Temizlik
+          if (collected.first() && collected.first().deletable) {
+            try {
+              await collected.first().delete().catch(e => {
+                console.error('Could not delete message:', e);
+              });
+            } catch (deleteError) {
+              console.error('Delete error:', deleteError);
+            }
+          }
+        } else {
+          try {
+            await interaction.followUp({ content: 'Red nedeni alınamadı. İşlem iptal edildi.', ephemeral: true });
+          } catch (followUpError) {
+            console.error('Could not follow up on missing reason:', followUpError);
+          }
         }
-      } catch (dmError) {
-        console.error('DM send error:', dmError);
-        // DM gönderilmezse kanalda devam et
-      }
-      
-      // Sadece işlemi gerçekleştiren yetkiliye özel bildirim
-      await interaction.followUp({ content: `❌ Ticket reddedildi.`, ephemeral: true });
-      
-      // Temizlik
-      if (collected.first() && collected.first().deletable) {
+      } catch (awaitError) {
+        console.error('Error awaiting reject reason:', awaitError);
         try {
-          await collected.first().delete();
-        } catch (e) {
-          console.error('Could not delete message:', e);
+          await interaction.followUp({ content: 'Red nedeni için süre doldu. İşlem iptal edildi.', ephemeral: true });
+        } catch (followUpError) {
+          console.error('Could not follow up after timeout:', followUpError);
         }
       }
-      
-    } catch (error) {
-      console.error('Error awaiting reject reason:', error);
-      await interaction.followUp({ content: 'Red nedeni için süre doldu. İşlem iptal edildi.', ephemeral: true });
+    } catch (initialError) {
+      console.error('Initial reply error:', initialError);
+      try {
+        // Eğer daha önce cevap verilmediyse, hata mesajı gönder
+        if (!interaction.replied) {
+          await interaction.reply({ content: 'Ticket reddedilirken bir hata oluştu.', ephemeral: true });
+        }
+      } catch (replyError) {
+        console.error('Error during error handling:', replyError);
+      }
     }
   } catch (error) {
     console.error('Error rejecting ticket:', error);
-    if (!interaction.replied) {
-      await interaction.reply({ content: 'Ticket reddedilirken bir hata oluştu.' });
-    } else {
-      await interaction.followUp({ content: 'Ticket reddedilirken bir hata oluştu.' });
+    try {
+      if (!interaction.replied) {
+        await interaction.reply({ content: 'Ticket reddedilirken bir hata oluştu.', ephemeral: true });
+      } else {
+        await interaction.followUp({ content: 'Ticket reddedilirken bir hata oluştu.', ephemeral: true });
+      }
+    } catch (finalError) {
+      console.error('Final error handler failed:', finalError);
     }
   }
 }
 
 async function closeTicket(interaction) {
   try {
-    await interaction.deferReply();
-    
-    // Ticket'ı bul
-    const ticketInfo = await storage.getTicketByChannelId(interaction.channel.id);
-    
-    if (!ticketInfo) {
-      return interaction.followUp({ content: 'Ticket bilgisi bulunamadı.' });
+    // Kanal kontrolü yapın
+    if (!interaction.channel) {
+      console.log("Close ticket attempted on a non-existent channel");
+      return; // Kanal yoksa hiçbir şey yapma
     }
     
-    // Yetkilinin kendisini güncelle/kaydet
-    const staffData = {
-      discordId: interaction.user.id,
-      username: interaction.user.username,
-      avatarUrl: interaction.user.displayAvatarURL()
-    };
-    
-    const staffUser = await storage.createOrUpdateUser(staffData);
-    
-    if (!staffUser) {
-      return interaction.followUp({ content: 'Yetkili bilgisi güncellenemedi.' });
-    }
-    
-    // Ticket'ı kapat - kapatanın ID'sini de kaydet
-    await storage.closeTicket(ticketInfo.id, staffUser.id);
-    
-    // Kapatma bildirimi - sadece yetkili görecek şekilde
-    await interaction.followUp({ content: `✅ Kanal kapanıyor...`, ephemeral: true });
-    
-    // Direkt olarak kanalı sil (10 saniye bekle)
-    setTimeout(async () => {
-      try {
-        await interaction.channel.delete();
-      } catch (deleteError) {
-        console.error('Error deleting channel:', deleteError);
+    try {
+      await interaction.deferReply({ ephemeral: true }).catch(err => {
+        console.error('Could not defer reply:', err);
+      });
+      
+      // Ticket'ı bul
+      const ticketInfo = await storage.getTicketByChannelId(interaction.channel.id).catch(err => {
+        console.error("Error fetching ticket info:", err);
+        return null;
+      });
+      
+      if (!ticketInfo) {
+        return interaction.followUp({ 
+          content: 'Ticket bilgisi bulunamadı veya bu kanal bir ticket kanalı değil.', 
+          ephemeral: true 
+        }).catch(err => console.error('Could not follow up:', err));
       }
-    }, 10000);
+      
+      // Yetkilinin kendisini güncelle/kaydet
+      const staffData = {
+        discordId: interaction.user.id,
+        username: interaction.user.username,
+        avatarUrl: interaction.user.displayAvatarURL()
+      };
+      
+      const staffUser = await storage.createOrUpdateUser(staffData).catch(err => {
+        console.error("Error creating/updating staff user:", err);
+        return null;
+      });
+      
+      if (!staffUser) {
+        return interaction.followUp({ 
+          content: 'Yetkili bilgisi güncellenemedi.', 
+          ephemeral: true 
+        }).catch(err => console.error('Could not follow up:', err));
+      }
+      
+      // Ticket'ı kapat - kapatanın ID'sini de kaydet
+      await storage.closeTicket(ticketInfo.id, staffUser.id).catch(err => {
+        console.error("Error closing ticket in DB:", err);
+        throw new Error("Ticket veritabanında kapatılamadı");
+      });
+      
+      // Kapatma bildirimi - sadece yetkili görecek şekilde
+      try {
+        await interaction.followUp({ 
+          content: `✅ Kanal kapanıyor...`, 
+          ephemeral: true 
+        });
+      } catch (followUpError) {
+        console.error('Could not follow up after ticket closed:', followUpError);
+      }
+      
+      // Geçerli bir kanal referansı için kontrol
+      const channelToDelete = interaction.channel;
+      
+      // Direkt olarak kanalı sil (10 saniye bekle)
+      setTimeout(async () => {
+        try {
+          if (channelToDelete && !channelToDelete.deleted) {
+            await channelToDelete.delete().catch(e => {
+              console.error('Channel delete error:', e);
+            });
+          }
+        } catch (deleteError) {
+          console.error('Error deleting channel:', deleteError);
+        }
+      }, 10000);
+      
+    } catch (innerError) {
+      console.error('Inner error in closeTicket:', innerError);
+      try {
+        if (interaction.deferred) {
+          await interaction.followUp({ 
+            content: 'Ticket kapatılırken bir hata oluştu.', 
+            ephemeral: true 
+          }).catch(e => console.error('Final error handler failed:', e));
+        } else if (!interaction.replied) {
+          await interaction.reply({ 
+            content: 'Ticket kapatılırken bir hata oluştu.', 
+            ephemeral: true 
+          }).catch(e => console.error('Final error handler failed:', e));
+        }
+      } catch (finalError) {
+        console.error('Final error handler in closeTicket failed:', finalError);
+      }
+    }
   } catch (error) {
     console.error('Error closing ticket:', error);
-    if (!interaction.replied) {
-      await interaction.reply({ content: 'Ticket kapatılırken bir hata oluştu.' });
-    } else {
-      await interaction.followUp({ content: 'Ticket kapatılırken bir hata oluştu.' });
+    try {
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ 
+          content: 'Ticket kapatılırken bir hata oluştu.', 
+          ephemeral: true 
+        }).catch(e => console.error('Final error handler failed:', e));
+      } else {
+        await interaction.followUp({ 
+          content: 'Ticket kapatılırken bir hata oluştu.', 
+          ephemeral: true 
+        }).catch(e => console.error('Final error handler failed:', e));
+      }
+    } catch (finalError) {
+      console.error('Final error handler failed:', finalError);
     }
   }
 }
 
 async function replyToTicket(interaction) {
   try {
-    await interaction.reply({ 
-      content: 'Lütfen yanıtınızı yazın:', 
-      ephemeral: true 
-    });
-    
-    const filter = m => m.author.id === interaction.user.id && m.channelId === interaction.channel.id;
+    // Kanal kontrolü yapın
+    if (!interaction.channel) {
+      console.log("Reply ticket attempted on a non-existent channel");
+      return; // Kanal yoksa hiçbir şey yapma
+    }
     
     try {
-      const collected = await interaction.channel.awaitMessages({
-        filter,
-        max: 1,
-        time: 60000,
-        errors: ['time']
+      await interaction.reply({ 
+        content: 'Lütfen yanıtınızı yazın:', 
+        ephemeral: true 
+      }).catch(err => {
+        console.error('Could not reply:', err);
+        throw new Error("Initial reply failed");
       });
       
-      const replyText = collected.first().content;
+      const filter = m => m.author.id === interaction.user.id && m.channelId === interaction.channel.id;
       
-      // Ticket'ı bul
-      const ticketInfo = await storage.getTicketByChannelId(interaction.channel.id);
-      
-      if (!ticketInfo) {
-        return interaction.followUp({ content: 'Ticket bilgisi bulunamadı.' });
-      }
-      
-      // Kullanıcıyı veritabanında oluştur veya güncelle
-      const userData = {
-        discordId: interaction.user.id,
-        username: interaction.user.username,
-        avatarUrl: interaction.user.displayAvatarURL()
-      };
-      
-      const dbUser = await storage.createOrUpdateUser(userData);
-      
-      if (!dbUser) {
-        return interaction.followUp({ content: 'Kullanıcı bilgileri kaydedilemedi.' });
-      }
-      
-      // Yanıtı kaydet
-      const responseData = {
-        ticketId: ticketInfo.id,
-        userId: dbUser.id,
-        message: replyText
-      };
-      
-      await storage.addResponse(responseData);
-      
-      // Yanıt embed'i oluştur
-      const embed = new MessageEmbed()
-        .setColor('#5865F2')
-        .setAuthor({ name: interaction.user.username, iconURL: interaction.user.displayAvatarURL() })
-        .setDescription(replyText)
-        .setTimestamp();
-      
-      // Kanala bildirimde bulun
-      await interaction.channel.send({ 
-        embeds: [embed],
-        allowedMentions: { parse: ['users'], everyone: false }
-      });
-      
-      // DM gönderme işlemi kaldırıldı - kullanıcı bildirimleri sadece kanal içinde olacak
-      
-      // Temizlik
-      await interaction.followUp({ content: 'Yanıtınız başarıyla gönderildi!', ephemeral: true });
-      if (collected.first() && collected.first().deletable) {
+      try {
+        const collected = await interaction.channel.awaitMessages({
+          filter,
+          max: 1,
+          time: 60000,
+          errors: ['time']
+        }).catch(err => {
+          console.error('awaitMessages error:', err);
+          return null;
+        });
+        
+        // Mesaj toplama başarısız olduysa
+        if (!collected || !collected.first()) {
+          return interaction.followUp({ 
+            content: 'Yanıt alınamadı. İşlem iptal edildi.', 
+            ephemeral: true 
+          }).catch(err => console.error('Could not follow up after no collection:', err));
+        }
+        
+        const replyText = collected.first().content;
+        
+        // Ticket'ı bul
+        const ticketInfo = await storage.getTicketByChannelId(interaction.channel.id).catch(err => {
+          console.error("Error fetching ticket info:", err);
+          return null;
+        });
+        
+        if (!ticketInfo) {
+          try {
+            await interaction.followUp({ 
+              content: 'Ticket bilgisi bulunamadı veya bu kanal bir ticket kanalı değil.', 
+              ephemeral: true 
+            });
+          } catch (followUpError) {
+            console.error('Could not follow up after ticket not found:', followUpError);
+          }
+          
+          // Kullanıcının mesajını silmeye çalış
+          if (collected.first() && collected.first().deletable) {
+            try {
+              await collected.first().delete().catch(e => {
+                console.error('Could not delete message:', e);
+              });
+            } catch (deleteError) {
+              console.error('Delete error:', deleteError);
+            }
+          }
+          
+          return;
+        }
+        
+        // Kullanıcıyı veritabanında oluştur veya güncelle
+        const userData = {
+          discordId: interaction.user.id,
+          username: interaction.user.username,
+          avatarUrl: interaction.user.displayAvatarURL()
+        };
+        
+        const dbUser = await storage.createOrUpdateUser(userData).catch(err => {
+          console.error("Error creating/updating user:", err);
+          return null;
+        });
+        
+        if (!dbUser) {
+          try {
+            await interaction.followUp({ 
+              content: 'Kullanıcı bilgileri kaydedilemedi.', 
+              ephemeral: true 
+            });
+          } catch (followUpError) {
+            console.error('Could not follow up after user save failed:', followUpError);
+          }
+          
+          // Kullanıcının mesajını silmeye çalış
+          if (collected.first() && collected.first().deletable) {
+            try {
+              await collected.first().delete().catch(e => {
+                console.error('Could not delete message:', e);
+              });
+            } catch (deleteError) {
+              console.error('Delete error:', deleteError);
+            }
+          }
+          
+          return;
+        }
+        
+        // Yanıtı kaydet
+        const responseData = {
+          ticketId: ticketInfo.id,
+          userId: dbUser.id,
+          message: replyText
+        };
+        
+        await storage.addResponse(responseData).catch(err => {
+          console.error("Error adding response:", err);
+          throw new Error("Response could not be added to database");
+        });
+        
+        // Yanıt embed'i oluştur
+        const embed = new MessageEmbed()
+          .setColor('#5865F2')
+          .setAuthor({ name: interaction.user.username, iconURL: interaction.user.displayAvatarURL() })
+          .setDescription(replyText)
+          .setTimestamp();
+        
+        // Kanala bildirimde bulun - kanal hala mevcut mu kontrol et
+        if (interaction.channel && !interaction.channel.deleted) {
+          await interaction.channel.send({ 
+            embeds: [embed],
+            allowedMentions: { parse: ['users'], everyone: false }
+          }).catch(err => {
+            console.error('Could not send reply to channel:', err);
+            throw new Error("Could not send message to channel");
+          });
+        } else {
+          console.error('Channel no longer exists, cannot send reply');
+          return;
+        }
+        
+        // Temizlik - bildirim
         try {
-          await collected.first().delete();
-        } catch (e) {
-          console.error('Could not delete message:', e);
+          await interaction.followUp({ 
+            content: 'Yanıtınız başarıyla gönderildi!', 
+            ephemeral: true 
+          });
+        } catch (followUpError) {
+          console.error('Could not follow up with success message:', followUpError);
+        }
+        
+        // Kullanıcının mesajını silmeye çalış
+        if (collected.first() && collected.first().deletable) {
+          try {
+            await collected.first().delete().catch(e => {
+              console.error('Could not delete message:', e);
+            });
+          } catch (deleteError) {
+            console.error('Delete error:', deleteError);
+          }
+        }
+        
+      } catch (awaitError) {
+        console.error('Error awaiting reply:', awaitError);
+        try {
+          await interaction.followUp({ 
+            content: 'Yanıt için süre doldu. İşlem iptal edildi.', 
+            ephemeral: true 
+          });
+        } catch (followUpError) {
+          console.error('Could not follow up after timeout:', followUpError);
         }
       }
-      
-    } catch (error) {
-      console.error('Error awaiting reply:', error);
-      await interaction.followUp({ content: 'Yanıt için süre doldu. İşlem iptal edildi.', ephemeral: true });
+    } catch (initialError) {
+      console.error('Initial error in replyToTicket:', initialError);
+      try {
+        if (!interaction.replied) {
+          await interaction.reply({ 
+            content: 'Yanıt gönderilirken bir hata oluştu.', 
+            ephemeral: true 
+          }).catch(e => console.error('Final reply error:', e));
+        }
+      } catch (replyError) {
+        console.error('Error during error handling:', replyError);
+      }
     }
   } catch (error) {
     console.error('Error replying to ticket:', error);
-    if (!interaction.replied) {
-      await interaction.reply({ content: 'Yanıt gönderilirken bir hata oluştu.', ephemeral: true });
-    } else {
-      await interaction.followUp({ content: 'Yanıt gönderilirken bir hata oluştu.', ephemeral: true });
+    try {
+      if (!interaction.replied) {
+        await interaction.reply({ 
+          content: 'Yanıt gönderilirken bir hata oluştu.', 
+          ephemeral: true 
+        }).catch(e => console.error('Final error handler failed:', e));
+      } else {
+        await interaction.followUp({ 
+          content: 'Yanıt gönderilirken bir hata oluştu.', 
+          ephemeral: true 
+        }).catch(e => console.error('Final error handler failed:', e));
+      }
+    } catch (finalError) {
+      console.error('Final error handler failed:', finalError);
     }
   }
 }
@@ -1310,22 +1616,42 @@ client.on('interactionCreate', async (interaction) => {
         // Kategori seçim menüsünü göster
         const categories = await storage.getAllCategories();
         
+        // Kategori yoksa, default bir tane oluştur
         if (categories.length === 0) {
-          return interaction.reply({ content: 'Henüz hiç ticket kategorisi yapılandırılmamış.', ephemeral: true });
+          const defaultCategory = {
+            id: 1,
+            name: "Destek", 
+            emoji: "🎫", 
+            description: "Genel destek talebi"
+          };
+          memoryStorage.categories.set(defaultCategory.id, defaultCategory);
+          categories.push(defaultCategory);
         }
         
         const selectMenu = new MessageSelectMenu()
           .setCustomId('ticket_category')
           .setPlaceholder('Bir kategori seçin...');
         
-        categories.forEach(category => {
+        // Kategori seçeneklerini ekle  
+        const options = categories.map(category => ({
+          label: category.name,
+          value: category.id.toString(),
+          description: category.description || 'Açıklama yok',
+          emoji: category.emoji
+        }));
+        
+        // Discord options seçenekleri 1-25 arasında olmalı
+        if (options.length > 0) {
+          selectMenu.addOptions(options);
+        } else {
+          // Hiç kategori yoksa varsayılan bir seçenek ekle
           selectMenu.addOptions([{
-            label: category.name,
-            value: category.id.toString(),
-            description: category.description || 'Açıklama yok',
-            emoji: category.emoji
+            label: "Genel Destek",
+            value: "1",
+            description: "Destek talebi oluştur",
+            emoji: "🎫"
           }]);
-        });
+        }
         
         const row = new MessageActionRow().addComponents(selectMenu);
         
@@ -1501,7 +1827,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 // Bot hazır olduğunda
-client.once('ready', () => {
+client.once('ready', async () => {
   console.log(`Discord bot logged in as ${client.user.tag}`);
   console.log('Bot is fully initialized and ready to handle interactions');
   
@@ -1511,6 +1837,36 @@ client.once('ready', () => {
       memoryStorage.categories.set(category.id, category);
     });
     console.log('Default categories added to memory storage');
+  }
+  
+  // Sunucular için ayarları hafızaya al (yetkili roller ve ticket numaraları)
+  try {
+    const guilds = client.guilds.cache.map(g => g.id);
+    
+    // Her bir sunucu için ayarları yükle
+    for (const guildId of guilds) {
+      const settings = await storage.getBotSettings(guildId);
+      
+      // Eğer yetkili rolü ayarlandıysa, hafızaya al
+      if (settings.staff_role_id) {
+        memoryStorage.staffRoles.set(guildId, settings.staff_role_id);
+        console.log(`Sunucu ${guildId} için yetkili rolü hafızaya yüklendi: ${settings.staff_role_id}`);
+      } else {
+        console.log(`Sunucu ${guildId} için yetkili rolü ayarlanmamış.`);
+      }
+      
+      // Ticket numaralarını hafızaya al
+      if (settings.last_ticket_number) {
+        memoryStorage.lastTicketNumbers.set(guildId, settings.last_ticket_number);
+        console.log(`Sunucu ${guildId} için son ticket numarası hafızaya yüklendi: ${settings.last_ticket_number}`);
+      } else {
+        console.log(`Sunucu ${guildId} için henüz ticket oluşturulmamış.`);
+      }
+    }
+    
+    console.log('Bot ayarları başarıyla yüklendi.');
+  } catch (error) {
+    console.error('Bot ayarları yüklenirken hata oluştu:', error);
   }
   
   // Bot durumunu ayarla
