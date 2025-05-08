@@ -706,9 +706,16 @@ async function handleTicketKurCommand(message) {
         // Panel mesajları artık gösterilmiyor
       }
       
-      // Rol seçiminden sonra herhangi bir güncelleme yapmaya çalışmıyoruz
-      // Eğer zaten cevap verilmişse (INTERACTION_ALREADY_REPLIED) hatası almamak için
-      // roleSelection.update() çağrısı kaldırıldı
+      // Ayarladığın rolü ve kurulum başarılı mesajını sadece komutu yazan kişi görsün
+      try {
+        await roleSelection.reply({ 
+          content: `✅ Ticket sistemi başarıyla kuruldu!\n👮‍♂️ Yetkili rolü: <@&${selectedRoleId}>\n🎟️ Ticket paneli oluşturuldu`, 
+          ephemeral: true 
+        });
+      } catch (replyError) {
+        console.error('Panel confirmation error:', replyError);
+        // Hata olursa sessizce devam et
+      }
     } catch (error) {
       console.error('Role selection error:', error);
       // Rol seçimi için süre doldu mesajı kaldırıldı (kullanıcı isteği)
@@ -782,10 +789,20 @@ async function handleTicketCommand(message) {
       
       const categoryId = parseInt(categorySelection.values[0]);
       
-      // Açıklama istemeden direkt olarak ticket oluştur (kullanıcı isteği)
-      const description = "";  // Boş açıklama 
+      // Açıklama kısmı kaldırıldı (kullanıcı isteği)
+      const description = "";
       
-      // Ticket oluştur - ticket açıldığında kullanıcıyı etiketleyerek
+      // Kullanıcıya bildirim gönder - işlemin devam ettiğini bildirmek için
+      try {
+        await categorySelection.followUp({ 
+          content: "⏳ Ticket oluşturuluyor, lütfen bekleyin...", 
+          ephemeral: true 
+        });
+      } catch (followupError) {
+        console.error('Follow-up notification error:', followupError);
+      }
+      
+      // Ticket oluştur
       await handleTicketCreation(message, categoryId, description);
     } catch (error) {
       console.error('Error awaiting category selection:', error);
