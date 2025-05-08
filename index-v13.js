@@ -386,27 +386,13 @@ const storage = {
   },
   
   async getNextTicketNumber(guildId) {
-    // Önce botSettings'den son numarayı kontrol et
-    const settings = await this.getBotSettings(guildId);
+    // Rastgele ticket numarası üret
+    // 1000-9999 arasında rastgele bir sayı
+    const randomNumber = Math.floor(Math.random() * 9000) + 1000;
     
-    // Hafızadaki numara veya botSettings'teki numarayı al (hangisi daha yüksekse)
-    let memoryNumber = memoryStorage.lastTicketNumbers.get(guildId) || 0;
-    let settingsNumber = settings.last_ticket_number || 0;
+    console.log(`Sunucu ${guildId} için rastgele ticket numarası üretildi: ${randomNumber}`);
     
-    // En son kullanılan ticket numarasını bul (hangisi daha büyükse)
-    let lastNumber = Math.max(memoryNumber, settingsNumber);
-    
-    // Bir sonraki numaraya geç
-    lastNumber++;
-    
-    // Her iki yerde de güncelle
-    memoryStorage.lastTicketNumbers.set(guildId, lastNumber);
-    settings.last_ticket_number = lastNumber;
-    memoryStorage.botSettings.set(guildId, settings);
-    
-    console.log(`Sunucu ${guildId} için yeni ticket numarası: ${lastNumber}`);
-    
-    return lastNumber;
+    return randomNumber;
   }
 };
 
@@ -474,7 +460,6 @@ async function createNewTicketEmbed(ticket) {
     .setThumbnail('https://i.imgur.com/pgTRpDd.png')
     .addField('👤 Açan:', `<@${ticket.user_discord_id || 'Bilinmeyen Kullanıcı'}>`, false)
     .addField('📂 Kategori:', `${ticket.category_emoji || '📌'} ${ticket.category_name || 'Genel Kategori'}`, false)
-    .addField('📝 Açıklama:', `"${ticket.description}"`, false)
     .addField('📆 Açılış:', formatDate(ticket.created_at), false)
     .setImage('https://i.imgur.com/pgTRpDd.png');
 
