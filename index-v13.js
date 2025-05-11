@@ -1738,8 +1738,18 @@ async function replyToTicket(interaction) {
     }
     
     try {
+      // Daha profesyonel yanıt bildirim mesajı
+      const replyEmbed = new MessageEmbed()
+        .setColor('#3498db')
+        .setTitle('💬 Yanıt Bekleniyor')
+        .setDescription('Lütfen yanıtınızı normal bir mesaj olarak yazın. Botun yanıtınızı alabilmesi için 5 dakikalık süreniz var.')
+        .addField('ℹ️ Bilgi', 'Mesajınızı yazdıktan sonra bot otomatik olarak ticketa ekleyecektir.')
+        .addField('⏱️ Süre', '5 dakika')
+        .setFooter({ text: 'Cevap vermek istemiyorsanız, bu mesajı görmezden gelebilirsiniz.' })
+        .setTimestamp();
+      
       await interaction.reply({ 
-        content: 'Lütfen yanıtınızı yazın:', 
+        embeds: [replyEmbed], 
         ephemeral: true 
       }).catch(err => {
         console.error('Could not reply:', err);
@@ -1749,11 +1759,12 @@ async function replyToTicket(interaction) {
       const filter = m => m.author.id === interaction.user.id && m.channelId === interaction.channel.id;
       
       try {
+        // Süre aşımı sorunu çözümü - daha uzun bir süre (5 dakika) ve hata işleme
         const collected = await interaction.channel.awaitMessages({
           filter,
           max: 1,
-          time: 60000,
-          errors: ['time']
+          time: 300000, // 5 dakika - kullanıcıya yeterli zaman vermek için
+          errors: [] // Boş dizi olarak değiştirdik (time hatası yok)
         }).catch(err => {
           console.error('awaitMessages error:', err);
           return null;
@@ -1847,34 +1858,13 @@ async function replyToTicket(interaction) {
           throw new Error("Response could not be added to database");
         });
         
-        // Rastgele renk seçimi
-        const staffColors = ['#FF5733', '#33FF57', '#3357FF', '#FFC300', '#C70039', '#4C9141', '#900C3F', '#0081CF', '#5D55A3', '#2D7D86'];
-        const randomColor = staffColors[Math.floor(Math.random() * staffColors.length)];
+        // Sabit profesyonel renk
+        const staffColor = '#5865F2'; // Discord rengi - daha profesyonel
         
-        // İlginç emoji seçimi
-        const emojis = ['🔥', '✨', '💫', '🌟', '⚡', '🚀', '💯', '🎯', '🏆', '💪', '👑'];
-        const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-        
-        // Mizahi rastgele alt başlık
-        const subtitles = [
-          'Efsane bir yanıt geldi!',
-          'Yetkili konuştu!',
-          'İşte bu önemli!',
-          'Dikkatli oku delikanlı!',
-          'Konuştu mu devleşiyor!',
-          'Bu bilgiyi yazıp kenara koy!',
-          'Transfer döneminde bomba!',
-          'Saha kenarından son dakika!',
-          'Kadroda sürpriz değişiklik!',
-          'VAR'dan geldi bu bilgi!'
-        ];
-        const randomSubtitle = subtitles[Math.floor(Math.random() * subtitles.length)];
-        
-        // Yanıt embed'i oluştur - süper şık
+        // Yanıt embed'i oluştur - daha ciddi ve profesyonel
         const embed = new MessageEmbed()
-          .setColor(randomColor)
-          .setAuthor({ name: `${randomEmoji} ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() })
-          .setTitle(randomSubtitle)
+          .setColor(staffColor)
+          .setAuthor({ name: interaction.user.username, iconURL: interaction.user.displayAvatarURL() })
           .setDescription(replyText)
           .setFooter({ text: `${interaction.guild.name} | Ticket #${ticketInfo.id}` })
           .setTimestamp();
