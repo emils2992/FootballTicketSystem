@@ -684,32 +684,52 @@ async function createTicketPanelEmbed(guildId) {
   const settings = await storage.getBotSettings(guildId);
   const prefix = settings?.prefix || '.';
   
+  // Rastgele renk seçimi
+  const randomColors = ['#5865F2', '#FF5733', '#33FF57', '#3357FF', '#FFC300', '#C70039', '#4C9141', '#900C3F'];
+  const randomColor = randomColors[Math.floor(Math.random() * randomColors.length)];
+  
+  // Şu anki tarih
+  const currentDate = new Date();
+  const formattedDate = `${currentDate.toLocaleDateString('tr-TR')} - ${currentDate.toLocaleTimeString('tr-TR')}`;
+  
   // Create the embed
   const embed = new MessageEmbed()
-    .setColor('#5865F2') // Discord blurple color
-    .setTitle('🎟️ Futbol RP Ticket Paneli')
+    .setColor(randomColor)
+    .setTitle('🎟️ Futbol RP Ticket Sistemi')
     .setDescription(
-      'Bir sorun, talep veya delikanlı gibi açıklaman mı var?\n\n' +
-      '👇 Aşağıdaki seçeneklerle bir ticket oluşturabilirsin.'
+      '**Yardıma ihtiyacın mı var yoksa yetkililere ulaşman mı gerekiyor?**\n\n' +
+      '> 📝 Transferler için bilgi almak mı istiyorsun?\n' +
+      '> 🏆 Yönetimle iletişime geçmek mi istiyorsun?\n' +
+      '> 📋 Bir konuda şikayetin mi var?\n' +
+      '> 🎭 Basın toplantısı düzenlemek mi istiyorsun?\n\n' +
+      '**Aşağıdaki düğmeye tıklayarak ticket açabilirsin!**'
     )
+    .setThumbnail('https://i.imgur.com/pgTRpDd.png')
     .setImage('https://i.imgur.com/U78xRjt.png')
-    .setFooter(`Görkemli Ticket Sistemi | Prefix: ${prefix} | by Porsuk Support`);
+    .setFooter({ text: `Güncellenme: ${formattedDate} | Prefix: ${prefix} | Powered by Porsuk Support` })
+    .setTimestamp();
 
   // Create buttons
   const createTicketButton = new MessageButton()
     .setCustomId('create_ticket')
     .setLabel('Ticket Oluştur')
     .setEmoji('📬')
-    .setStyle('PRIMARY');
-  
+    .setStyle('SUCCESS'); // Yeşil renk
+
   const myTicketsButton = new MessageButton()
     .setCustomId('my_tickets')
     .setLabel('Ticketlarım')
     .setEmoji('📋')
-    .setStyle('SECONDARY');
+    .setStyle('PRIMARY'); // Mavi renk
+    
+  const helpButton = new MessageButton()
+    .setCustomId('help_button')
+    .setLabel('Yardım')
+    .setEmoji('❓')
+    .setStyle('SECONDARY'); // Gri renk
 
   // Add buttons to row
-  const row = new MessageActionRow().addComponents(createTicketButton, myTicketsButton);
+  const row = new MessageActionRow().addComponents(createTicketButton, myTicketsButton, helpButton);
 
   return { embed, row };
 }
@@ -828,9 +848,24 @@ function createTicketListEmbed(tickets) {
 
 // Command handlers
 async function handleTicketKurCommand(message) {
+  // Kullanıcının yazdığı komutu sil - chat temiz kalsın
+  try {
+    await message.delete();
+  } catch (deleteError) {
+    console.error('Komut mesajı silinemedi:', deleteError);
+    // Hata olursa sessizce devam et
+  }
+  
   // Check if user has staff or admin permissions
   if (!isStaffMember(message.member)) {
-    return message.reply({ content: 'Bu komutu kullanabilmek için yetkili olmalısın delikanlı.' });
+    const errorMsg = await message.channel.send({ content: `<@${message.author.id}>, bu komutu kullanabilmek için yetkili olmalısın delikanlı.` });
+    
+    // 5 saniye sonra hata mesajını sil
+    setTimeout(() => {
+      errorMsg.delete().catch(e => console.error('Hata mesajı silinemedi:', e));
+    }, 5000);
+    
+    return;
   }
   
   // Komutun kullanıldığı kanal ID'sini kaydet (çift komut çalışmasını engellemek için)
@@ -884,12 +919,16 @@ async function handleTicketKurCommand(message) {
       
     const row = new MessageActionRow().addComponents(selectMenu);
     
-    // Normal mesaj olarak gönder (ephemeral mesajlar discord.js v13'te düzgün çalışmıyor)
+    // Mesajı gönder ve 5 saniye sonra otomatik sil
     const replyMessage = await message.reply({ 
       content: 'Lütfen ticket sistemi için yetkili rolünü seçin:', 
       components: [row]
-      // ephemeral: true özelliğini kaldırdık
     });
+    
+    // 5 saniye sonra otomatik sil
+    setTimeout(() => {
+      replyMessage.delete().catch(e => console.error('Rol seçim mesajı silinemedi:', e));
+    }, 5000); // 5 saniye sonra
     
     // Rol seçimini bekle
     const filter = i => i.customId === 'staff_role_select' && i.user.id === message.author.id;
@@ -921,12 +960,42 @@ async function handleTicketKurCommand(message) {
       // Panel bilgilerini kaydet (bu sunucuya özel)
       await storage.updateTicketPanel(message.guild.id, message.channel.id, sentPanel.id);
       
-      // Ayarladığın rolü ve kurulum başarılı mesajını sadece komutu yazan kişi görsün
+      // Ayarladığın rolü ve kurulum başarılı mesajını sadece komutu yazan kişi görsün - daha güzel bir embed mesaj ile
       try {
-        // Discord.js v13'te ephemeral message için deferReply ve followUp kullan
+        // Şık bir embed oluştur
+        const successEmbed = new MessageEmbed()
+          .setColor('#00FF00') // Yeşil
+          .setTitle('✅ Ticket Sistemi Kuruldu!')
+          .setDescription(`Ticket sistemi başarıyla kuruldu ve ayarlandı!`)
+          .addField('👮‍♂️ Yetkili Rolü', `<@&${selectedRoleId}>`, true)
+          .addField('🎟️ Kanal', `<#${message.channel.id}>`, true)
+          .addField('🕒 Kurulum Zamanı', `${formatDate(new Date())}`, false)
+          .setFooter({ text: `${message.guild.name} | Powered by Porsuk Support Ticket System` })
+          .setThumbnail('https://i.imgur.com/pgTRpDd.png')
+          .setTimestamp();
+        
+        // DM'den göndermeyi dene
+        try {
+          await message.author.send({ embeds: [successEmbed] });
+        } catch (dmError) {
+          console.log("DM gönderilemedi, kanala göndereceğiz:", dmError);
+          
+          // DM kapalıysa veya hata alındıysa, kanala gönderip sonra sil
+          const tempMsg = await message.channel.send({ 
+            content: `<@${message.author.id}>, kurulum bilgileriniz:`,
+            embeds: [successEmbed] 
+          });
+          
+          // 5 saniye sonra sil
+          setTimeout(() => {
+            tempMsg.delete().catch(e => console.error('Başarı mesajı silinemedi:', e));
+          }, 5000);
+        }
+        
+        // Discord.js v13'te ephemeral message için deferReply kullan (interaction yanıtı için)
         await roleSelection.deferReply({ ephemeral: true });
         await roleSelection.followUp({ 
-          content: `✅ Ticket sistemi başarıyla kuruldu!\n👮‍♂️ Yetkili rolü: <@&${selectedRoleId}>\n🎟️ Ticket paneli oluşturuldu`,
+          content: "Kurulum tamamlandı! Detaylı bilgi DM'den gönderildi.",
           ephemeral: true
         });
         
@@ -950,6 +1019,14 @@ async function handleTicketKurCommand(message) {
 }
 
 async function handleTicketCommand(message) {
+  // Kullanıcının yazdığı komutu sil - chat temiz kalsın
+  try {
+    await message.delete();
+  } catch (deleteError) {
+    console.error('Ticket komutu silinemedi:', deleteError);
+    // Hata olursa sessizce devam et
+  }
+  
   try {
     // Kategori seçim menüsü oluştur
     const categories = await storage.getAllCategories();
@@ -1203,6 +1280,14 @@ async function handleTicketCreation(message, categoryId, description) {
 }
 
 async function handleTicketlarimCommand(message) {
+  // Kullanıcının yazdığı komutu sil - chat temiz kalsın
+  try {
+    await message.delete();
+  } catch (deleteError) {
+    console.error('Ticketlarim komutu silinemedi:', deleteError);
+    // Hata olursa sessizce devam et
+  }
+  
   try {
     // Kullanıcıyı veritabanında bul
     const user = await storage.getUserByDiscordId(message.author.id);
@@ -1216,7 +1301,17 @@ async function handleTicketlarimCommand(message) {
       };
       const newUser = await storage.createOrUpdateUser(userData);
       
-      return message.reply({ content: 'Henüz bir ticket oluşturmamışsınız. Ticket panelinden ticket oluşturabilirsiniz.', });
+      // Mesaj gönder ama 5 saniye sonra sil
+      const noTicketsMsg = await message.channel.send({ 
+        content: `<@${message.author.id}>, henüz bir ticket oluşturmamışsınız. Ticket panelinden ticket oluşturabilirsiniz.` 
+      });
+      
+      // 5 saniye sonra mesajı sil
+      setTimeout(() => {
+        noTicketsMsg.delete().catch(e => console.error('Bilgi mesajı silinemedi:', e));
+      }, 5000);
+      
+      return;
     }
     
     // Kullanıcının ticketlarını al
@@ -1271,6 +1366,14 @@ async function handleTicketStatsCommand(message) {
 }
 
 async function handleHelpCommand(message) {
+  // Kullanıcının yazdığı komutu sil - chat temiz kalsın
+  try {
+    await message.delete();
+  } catch (deleteError) {
+    console.error('Yardım komutu silinemedi:', deleteError);
+    // Hata olursa sessizce devam et
+  }
+
   try {
     // Prefix'i al (bot ayarlarından veya varsayılan)
     const settings = await storage.getBotSettings(message.guild.id);
@@ -1306,10 +1409,28 @@ async function handleHelpCommand(message) {
     
     embed.setFooter({ text: 'Porsuk Support Ticket Sistemi' });
     
-    message.reply({ embeds: [embed] });
+    // Mesajı gönder ve 15 saniye sonra otomatik sil (yardım mesajı için daha uzun süre)
+    const helpReply = await message.channel.send({ 
+      content: `<@${message.author.id}>, yardım bilgileri:`,
+      embeds: [embed] 
+    });
+    
+    // 15 saniye sonra sil (yardım mesajını okumak için daha uzun süre)
+    setTimeout(() => {
+      helpReply.delete().catch(e => console.error('Yardım mesajı silinemedi:', e));
+    }, 15000); // 15 saniye sonra
   } catch (error) {
     console.error('Error showing help:', error);
-    message.reply({ content: 'Yardım mesajı gösterilirken bir hata oluştu.' });
+    
+    // Hata mesajını gönder ve 5 saniye sonra sil
+    const errorMsg = await message.channel.send({ 
+      content: `<@${message.author.id}>, yardım mesajı gösterilirken bir hata oluştu.` 
+    });
+    
+    // 5 saniye sonra sil
+    setTimeout(() => {
+      errorMsg.delete().catch(e => console.error('Hata mesajı silinemedi:', e));
+    }, 5000);
   }
 }
 
@@ -1971,6 +2092,40 @@ client.on('interactionCreate', async (interaction) => {
         const embed = createTicketListEmbed(tickets);
         
         await interaction.reply({ embeds: [embed], ephemeral: true });
+      } else if (interaction.customId === 'help_button') {
+        // Yardım mesajını göster
+        try {
+          // Prefix'i al (bot ayarlarından veya varsayılan)
+          const settings = await storage.getBotSettings(interaction.guild.id);
+          const prefix = settings?.prefix || '.';
+          
+          // Şık bir yardım embed'i oluştur
+          const helpEmbed = new MessageEmbed()
+            .setColor('#5865F2')
+            .setTitle('📚 Ticket Sistemi Yardım')
+            .setDescription(`Ticket sistemi hakkında bilmeniz gerekenler:`)
+            .addField('🎟️ Ticket Nasıl Açılır?', 
+              `Ticket oluşturmak için **Ticket Oluştur** butonuna tıklayın ve ilgili kategoriyi seçin.`, false)
+            .addField('🔍 Ticketlarıma Nasıl Bakarım?', 
+              `Daha önce açtığınız ticketları görmek için **Ticketlarım** butonuna tıklayın.`, false)
+            .addField('⏱️ Ticket İşlem Süreleri', 
+              `Ticketlarınız genellikle en geç 24 saat içinde yanıtlanır. Acil durumlarda lütfen bunu belirtin.`, false)
+            .addField('🔐 Ticket Nasıl Kapatılır?', 
+              `Ticket kapatmak için ticket kanalındaki kapatma butonunu kullanabilirsiniz.`, false)
+            .addField('⌨️ Kullanılabilir Komutlar', `
+              \`${prefix}ticketlarım\` - Oluşturduğunuz ticketları listeler
+              \`${prefix}help\` - Bu yardım mesajını gösterir
+            `, false)
+            .setThumbnail('https://i.imgur.com/pgTRpDd.png')
+            .setFooter({ text: `${interaction.guild.name} | Ticket Sistemi Yardım` })
+            .setTimestamp();
+            
+          // Ephemeral mesaj olarak gönder (sadece komutu kullanan kişi görür)
+          return interaction.reply({ embeds: [helpEmbed], ephemeral: true });
+        } catch (error) {
+          console.error('Error showing help from button:', error);
+          return interaction.reply({ content: 'Yardım bilgisi gösterilirken bir hata oluştu.', ephemeral: true });
+        }
       } else if (interaction.customId === 'accept_ticket') {
         await acceptTicket(interaction);
       } else if (interaction.customId === 'reject_ticket') {
