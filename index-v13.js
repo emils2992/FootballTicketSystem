@@ -1,6 +1,8 @@
-// index.js - Porsuk Ticket Bot - Discord.js v13 + Memory Storage
+// index.js - Porsuk Ticket Bot - Discord.js v13 + Memory Storage with JSON Persistence
 const { Client, Intents, MessageEmbed, MessageActionRow, MessageButton, MessageSelectMenu, Permissions, Collection } = require('discord.js');
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 
 // Express server (Glitch'i uyanık tutmak için)
 const app = express();
@@ -48,6 +50,190 @@ const memoryStorage = {
   lastTicketNumbers: new Map(), // Guild ID => Last ticket number
   staffRoles: new Map() // Guild ID => Staff Role ID
 };
+
+// JSON dosya yolları
+const DATA_DIR = path.join(__dirname, 'data');
+const TICKETS_FILE = path.join(DATA_DIR, 'tickets.json');
+const TICKETS_BACKUP_FILE = path.join(DATA_DIR, 'tickets_backup.json');
+
+// JSON verisini disk'ten yükle
+function loadDataFromDisk() {
+  try {
+    // Eğer data klasörü yoksa oluştur
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      console.log('Data klasörü oluşturuldu:', DATA_DIR);
+    }
+    
+    // Eğer tickets.json dosyası yoksa, boş bir veri yapısı oluştur ve kaydet
+    if (!fs.existsSync(TICKETS_FILE)) {
+      const emptyData = {
+        tickets: {},
+        settings: {},
+        lastTicketNumbers: {},
+        ticketResponses: {},
+        users: {}
+      };
+      fs.writeFileSync(TICKETS_FILE, JSON.stringify(emptyData, null, 2));
+      console.log('Boş tickets.json dosyası oluşturuldu');
+      return emptyData;
+    }
+    
+    // Dosyayı oku ve parse et
+    const rawData = fs.readFileSync(TICKETS_FILE, 'utf8');
+    const data = JSON.parse(rawData);
+    
+    // Eskiden kaydedilen verilerde eksik alanları kontrol et ve ekle
+    if (!data.ticketResponses) data.ticketResponses = {};
+    if (!data.users) data.users = {};
+    
+    console.log('Ticket verileri diskten yüklendi');
+    return data;
+  } catch (error) {
+    console.error('Veri diskten yüklenirken hata oluştu:', error);
+    return {
+      tickets: {},
+      settings: {},
+      lastTicketNumbers: {},
+      ticketResponses: {},
+      users: {}
+    };
+  }
+}
+
+// Mevcut JSON dosyasını yedekle
+function backupDataFile() {
+  try {
+    if (fs.existsSync(TICKETS_FILE)) {
+      fs.copyFileSync(TICKETS_FILE, TICKETS_BACKUP_FILE);
+      console.log('Ticket verileri yedeklendi');
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('Veri yedeklenirken hata oluştu:', error);
+    return false;
+  }
+}
+
+// JSON verisini diske kaydet
+function saveDataToDisk() {
+  try {
+    // Eğer data klasörü yoksa oluştur
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    
+    // Önce mevcut dosyayı yedekle
+    backupDataFile();
+    
+    // Memory'deki verileri JSON formatına dönüştür
+    const tickets = {};
+    memoryStorage.tickets.forEach((ticket, id) => {
+      tickets[id] = ticket;
+    });
+    
+    const settings = {};
+    memoryStorage.botSettings.forEach((setting, guildId) => {
+      settings[guildId] = setting;
+    });
+    
+    const lastTicketNumbers = {};
+    memoryStorage.lastTicketNumbers.forEach((number, guildId) => {
+      lastTicketNumbers[guildId] = number;
+    });
+    
+    // Ticket yanıtlarını JSON formatına dönüştür
+    const ticketResponses = {};
+    memoryStorage.ticketResponses.forEach((response, id) => {
+      ticketResponses[id] = response;
+    });
+    
+    // Kullanıcı verilerini JSON formatına dönüştür
+    const users = {};
+    memoryStorage.users.forEach((user, id) => {
+      users[id] = user;
+    });
+    
+    // JSON verisini oluştur
+    const data = {
+      tickets,
+      settings,
+      lastTicketNumbers,
+      ticketResponses,
+      users,
+      backup_date: new Date().toISOString() // Yedekleme tarihi ekle
+    };
+    
+    // Dosyaya yaz
+    fs.writeFileSync(TICKETS_FILE, JSON.stringify(data, null, 2));
+    console.log('Ticket verileri diske kaydedildi');
+    return true;
+  } catch (error) {
+    console.error('Veri diske kaydedilirken hata oluştu:', error);
+    return false;
+  }
+}
+
+// Diskten verileri Memory'ye yükle
+function loadDataToMemory() {
+  try {
+    const data = loadDataFromDisk();
+    
+    // Kullanıcı verilerini yükle (önce yükle çünkü ticket'lar kullanıcılara referans veriyor)
+    if (data.users) {
+      Object.entries(data.users).forEach(([id, user]) => {
+        memoryStorage.users.set(parseInt(id), user);
+      });
+      console.log(`${memoryStorage.users.size} kullanıcı hafızaya yüklendi`);
+    }
+    
+    // Ticket verilerini yükle
+    if (data.tickets) {
+      Object.entries(data.tickets).forEach(([id, ticket]) => {
+        memoryStorage.tickets.set(parseInt(id), ticket);
+        // En yüksek ticket ID'sini takip et
+        if (parseInt(id) > memoryStorage.lastTicketId) {
+          memoryStorage.lastTicketId = parseInt(id);
+        }
+      });
+      console.log(`${memoryStorage.tickets.size} ticket hafızaya yüklendi`);
+    }
+    
+    // Ticket yanıtlarını yükle
+    if (data.ticketResponses) {
+      Object.entries(data.ticketResponses).forEach(([id, response]) => {
+        memoryStorage.ticketResponses.set(parseInt(id), response);
+      });
+      console.log(`${memoryStorage.ticketResponses.size} ticket yanıtı hafızaya yüklendi`);
+    }
+    
+    // Bot ayarlarını yükle
+    if (data.settings) {
+      Object.entries(data.settings).forEach(([guildId, setting]) => {
+        memoryStorage.botSettings.set(guildId, setting);
+        // Yetkili rollerini de yükle
+        if (setting.staff_role_id) {
+          memoryStorage.staffRoles.set(guildId, setting.staff_role_id);
+        }
+      });
+      console.log(`${memoryStorage.botSettings.size} sunucu ayarı hafızaya yüklendi`);
+    }
+    
+    // Son ticket numaralarını yükle
+    if (data.lastTicketNumbers) {
+      Object.entries(data.lastTicketNumbers).forEach(([guildId, number]) => {
+        memoryStorage.lastTicketNumbers.set(guildId, number);
+      });
+      console.log(`${Object.keys(data.lastTicketNumbers).length} sunucu için son ticket numaraları hafızaya yüklendi`);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Memory\'ye veri yüklenirken hata oluştu:', error);
+    return false;
+  }
+}
 
 // Örnek kategoriler (hafıza)
 const defaultCategories = [
@@ -101,6 +287,9 @@ const storage = {
         staff_role_id: null // Yetkili rolünü botSettings içinde saklayalım
       };
       memoryStorage.botSettings.set(guildId, settings);
+      
+      // Yeni bir ayar oluşturulduğunda diske kaydet
+      saveDataToDisk();
     }
     return settings;
   },
@@ -113,6 +302,9 @@ const storage = {
     let settings = await this.getBotSettings(guildId);
     settings.staff_role_id = roleId;
     memoryStorage.botSettings.set(guildId, settings);
+    
+    // Değişiklikleri diske kaydet
+    saveDataToDisk();
     
     console.log(`Yetkili rolü ayarlandı: ${roleId} (Guild: ${guildId})`);
     return roleId;
@@ -156,6 +348,10 @@ const storage = {
       existingUser.username = username;
       existingUser.avatar_url = avatarUrl;
       existingUser.updated_at = new Date();
+      
+      // Değişiklikleri diske kaydet
+      saveDataToDisk();
+      
       return existingUser;
     } else {
       // Create new user
@@ -170,6 +366,10 @@ const storage = {
         updated_at: new Date()
       };
       memoryStorage.users.set(newUser.id, newUser);
+      
+      // Değişiklikleri diske kaydet
+      saveDataToDisk();
+      
       return newUser;
     }
   },
@@ -179,9 +379,15 @@ const storage = {
   },
   
   async createTicket(ticketData) {
-    const { userId, categoryId, description, status = 'pending', channelId } = ticketData;
+    const { userId, categoryId, description, status = 'pending', channelId, guildId } = ticketData;
     
     const ticketId = ++memoryStorage.lastTicketId;
+    
+    // Sunucu ID varsa, ticket numarası oluştur
+    let ticketNumber = null;
+    if (guildId) {
+      ticketNumber = await this.getNextTicketNumber(guildId);
+    }
     
     const newTicket = {
       id: ticketId,
@@ -189,6 +395,8 @@ const storage = {
       category_id: categoryId,
       staff_id: null,
       channel_id: channelId,
+      guild_id: guildId,
+      number: ticketNumber, // Ticket numarası (kanal adı için)
       description: description,
       status: status,
       reject_reason: null,
@@ -197,7 +405,12 @@ const storage = {
       updated_at: new Date()
     };
     
+    // Ticket'ı hafızaya ekle
     memoryStorage.tickets.set(ticketId, newTicket);
+    
+    // Değişiklikleri diske kaydet
+    saveDataToDisk();
+    
     return newTicket;
   },
   
@@ -263,6 +476,9 @@ const storage = {
     ticket.status = 'accepted';
     ticket.updated_at = new Date();
     
+    // Değişiklikleri diske kaydet
+    saveDataToDisk();
+    
     return ticket;
   },
   
@@ -273,6 +489,9 @@ const storage = {
     ticket.status = 'rejected';
     ticket.reject_reason = rejectReason;
     ticket.updated_at = new Date();
+    
+    // Değişiklikleri diske kaydet
+    saveDataToDisk();
     
     return ticket;
   },
@@ -289,6 +508,9 @@ const storage = {
     if (closedByUserId) {
       ticket.closed_by_user_id = closedByUserId;
     }
+    
+    // Değişiklikleri diske kaydet
+    saveDataToDisk();
     
     return ticket;
   },
@@ -335,6 +557,9 @@ const storage = {
     ticket.staff_id = staffId;
     ticket.updated_at = new Date();
     
+    // Değişiklikleri diske kaydet
+    saveDataToDisk();
+    
     return ticket;
   },
   
@@ -352,6 +577,10 @@ const storage = {
     };
     
     memoryStorage.ticketResponses.set(responseId, newResponse);
+    
+    // Değişiklikleri diske kaydet
+    saveDataToDisk();
+    
     return newResponse;
   },
   
@@ -386,13 +615,21 @@ const storage = {
   },
   
   async getNextTicketNumber(guildId) {
-    // Rastgele ticket numarası üret
-    // 1000-9999 arasında rastgele bir sayı
-    const randomNumber = Math.floor(Math.random() * 9000) + 1000;
+    // Son ticket numarasını al (veya yoksa 0 olarak başla)
+    let lastNumber = memoryStorage.lastTicketNumbers.get(guildId) || 0;
     
-    console.log(`Sunucu ${guildId} için rastgele ticket numarası üretildi: ${randomNumber}`);
+    // Artır ve güncelle
+    lastNumber++;
     
-    return randomNumber;
+    // Hafızada güncelle
+    memoryStorage.lastTicketNumbers.set(guildId, lastNumber);
+    
+    // Güncellemeyi diske kaydet
+    saveDataToDisk();
+    
+    console.log(`Sunucu ${guildId} için yeni ticket numarası: ${lastNumber}`);
+    
+    return lastNumber;
   }
 };
 
@@ -1862,12 +2099,16 @@ client.once('ready', async () => {
   console.log(`Discord bot logged in as ${client.user.tag}`);
   console.log('Bot is fully initialized and ready to handle interactions');
   
+  // Önce diskten kaydedilmiş verileri yükle
+  console.log('Kaydedilmiş verileri diskten yükleniyor...');
+  loadDataToMemory();
+  
   // Default kategori yoksa ekleyelim
   if (memoryStorage.categories.size === 0) {
     defaultCategories.forEach(category => {
       memoryStorage.categories.set(category.id, category);
     });
-    console.log('Default categories added to memory storage');
+    console.log('Default kategoriler hafızaya eklendi');
   }
   
   // Sunucular için ayarları hafızaya al (yetkili roller ve ticket numaraları)
@@ -1886,16 +2127,19 @@ client.once('ready', async () => {
         console.log(`Sunucu ${guildId} için yetkili rolü ayarlanmamış.`);
       }
       
-      // Ticket numaralarını hafızaya al
-      if (settings.last_ticket_number) {
+      // Ticket numaralarını hafızaya al (eğer diskten yüklenmemişse)
+      if (settings.last_ticket_number && !memoryStorage.lastTicketNumbers.has(guildId)) {
         memoryStorage.lastTicketNumbers.set(guildId, settings.last_ticket_number);
         console.log(`Sunucu ${guildId} için son ticket numarası hafızaya yüklendi: ${settings.last_ticket_number}`);
-      } else {
+      } else if (!memoryStorage.lastTicketNumbers.has(guildId)) {
         console.log(`Sunucu ${guildId} için henüz ticket oluşturulmamış.`);
       }
     }
     
     console.log('Bot ayarları başarıyla yüklendi.');
+    
+    // Diskten yüklenen verileri kullanarak tüm ticketları konsola yaz
+    console.log(`Toplam ${memoryStorage.tickets.size} ticket hafızada bulunuyor.`);
     
     // Açık ticket kanallarını kontrol et ve izinleri düzelt
     await checkAndFixTicketPermissions();
@@ -1905,6 +2149,12 @@ client.once('ready', async () => {
       console.log('Periyodik ticket izinleri kontrol ediliyor...');
       await checkAndFixTicketPermissions();
     }, 60 * 60 * 1000); // 1 saatte bir kontrol et
+    
+    // 5 dakika aralıklarla verileri diske otomatik kaydet
+    setInterval(() => {
+      console.log('Ticket verileri diske otomatik kaydediliyor...');
+      saveDataToDisk();
+    }, 5 * 60 * 1000); // 5 dakikada bir otomatik kaydet
   } catch (error) {
     console.error('Bot ayarları yüklenirken hata oluştu:', error);
   }
@@ -2002,19 +2252,37 @@ async function checkAndFixTicketPermissions() {
             // İlgili kullanıcıyı bul - isimden ticket numarasını çıkar
             const ticketMatch = channel.name.match(/ticket-(\d+)/);
             if (ticketMatch && ticketMatch[1]) {
-              // Ticket numarasından ticketı bul
-              const ticketNumber = parseInt(ticketMatch[1]);
+              // Ticket numarasından ticketı bul - önce channel_id ile ara
               const tickets = Array.from(memoryStorage.tickets.values());
-              const ticket = tickets.find(t => t.number === ticketNumber);
+              let ticket = tickets.find(t => t.channel_id === channel.id);
               
-              if (ticket && ticket.user_discord_id) {
-                // Kullanıcı bulunduysa, kanala erişim izni ver
-                await channel.permissionOverwrites.edit(ticket.user_discord_id, {
-                  VIEW_CHANNEL: true,
-                  SEND_MESSAGES: true,
-                  READ_MESSAGE_HISTORY: true
-                });
-                console.log(`Kanal "${channel.name}" için ticket açan kullanıcıya izinler verildi.`);
+              // Kanal ID ile bulunamadıysa, numaraya göre dene
+              if (!ticket) {
+                const ticketNumber = parseInt(ticketMatch[1]);
+                ticket = tickets.find(t => t.number === ticketNumber);
+              }
+              
+              if (ticket) {
+                // Kullanıcı ID'sini bul
+                const user = ticket.user_id ? memoryStorage.users.get(ticket.user_id) : null;
+                const userDiscordId = user ? user.discord_id : ticket.user_discord_id;
+                
+                if (userDiscordId) {
+                  // Kullanıcı bulunduysa, kanala erişim izni ver
+                  await channel.permissionOverwrites.edit(userDiscordId, {
+                    VIEW_CHANNEL: true,
+                    SEND_MESSAGES: true,
+                    READ_MESSAGE_HISTORY: true
+                  });
+                  console.log(`Kanal "${channel.name}" için ticket açan kullanıcıya izinler verildi.`);
+                  
+                  // Hafızadaki ticket verisinde channel_id eksikse güncelle
+                  if (!ticket.channel_id) {
+                    ticket.channel_id = channel.id;
+                    saveDataToDisk();
+                    console.log(`Ticket ID ${ticket.id} için eksik channel_id güncellendi: ${channel.id}`);
+                  }
+                }
               }
             }
             
