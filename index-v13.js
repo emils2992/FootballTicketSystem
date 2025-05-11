@@ -862,28 +862,41 @@ async function handleTicketKurCommand(message) {
     return;
   }
   
-  // Komutun kullanıldığı kanal ID'sini kaydet (çift komut çalışmasını engellemek için)
-  const channelAndUserKey = `${message.channel.id}_${message.author.id}`;
+  // Mevcut bir panel var mı kontrol edelim
+  const guildId = message.guild.id;
+  const existingPanel = await storage.getBotSettings(guildId);
   
-  // Son birkaç saniye içinde aynı komut çalıştırılmış mı kontrol et
-  const now = Date.now();
-  const lastCommandTime = memoryStorage.lastCommandTimes?.get(channelAndUserKey) || 0;
-  
-  // Eğer son 10 saniye içinde aynı kullanıcı aynı kanalda bu komutu çalıştırdıysa, engelle
-  if (now - lastCommandTime < 10000) {
-    console.log(`Command cooldown for ${message.author.tag} in channel ${message.channel.id}`);
-    return; // Sessizce engelle
+  // Mevcut paneli bulup silmeye çalışalım
+  if (existingPanel?.ticket_panel_channel_id && existingPanel?.ticket_panel_message_id) {
+    try {
+      // Eski panelin bulunduğu kanalı al
+      const oldChannel = message.guild.channels.cache.get(existingPanel.ticket_panel_channel_id);
+      
+      if (oldChannel) {
+        try {
+          // Eski mesajı bul ve sil
+          const oldMessage = await oldChannel.messages.fetch(existingPanel.ticket_panel_message_id)
+            .catch(e => {
+              console.log("Eski panel mesajı bulunamadı:", e);
+              return null;
+            });
+          
+          if (oldMessage) {
+            await oldMessage.delete().catch(e => console.log("Eski panel silinemedi:", e));
+            console.log("Eski panel silindi.");
+            await message.channel.send({ content: "Eski panel silindi, yeni panel oluşturuluyor..." })
+              .then(msg => setTimeout(() => msg.delete().catch(e => console.error("Bilgi mesajı silinemedi:", e)), 3000));
+          }
+        } catch (fetchError) {
+          console.log("Mesaj getirme hatası:", fetchError);
+        }
+      }
+    } catch (channelError) {
+      console.log("Kanal erişim hatası:", channelError);
+    }
   }
-  
-  // Komut kullanım zamanını kaydet
-  if (!memoryStorage.lastCommandTimes) {
-    memoryStorage.lastCommandTimes = new Map();
-  }
-  memoryStorage.lastCommandTimes.set(channelAndUserKey, now);
   
   try {
-    // Bu kontrol kısmını devre dışı bırakıyoruz çünkü sorun yaratabiliyor
-    // Her zaman yeni bir panel oluşturması için doğrudan devam edeceğiz
     
     // Sunucudaki roller
     let roles = message.guild.roles.cache.filter(role => 
