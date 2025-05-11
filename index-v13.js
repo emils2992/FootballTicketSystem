@@ -960,14 +960,14 @@ async function handleTicketKurCommand(message) {
       try {
         // Rol bilgisini doğru şekilde göstermek için rolü al
         const selectedRole = message.guild.roles.cache.get(selectedRoleId);
-        const roleName = selectedRole ? selectedRole.name : "Bilinmeyen rol";
+        const roleName = selectedRole ? selectedRole.name : "";
         
         // Şık bir embed oluştur
         const successEmbed = new MessageEmbed()
           .setColor('#00FF00') // Yeşil
           .setTitle('✅ Ticket Sistemi Kuruldu!')
           .setDescription(`Ticket sistemi başarıyla kuruldu ve ayarlandı!`)
-          .addField('👮‍♂️ Yetkili Rolü', `${roleName} (<@&${selectedRoleId}>)`, true)
+          .addField('👮‍♂️ Yetkili Rolü', `${roleName}`, true)
           .addField('🎟️ Kanal', `<#${message.channel.id}>`, true)
           .addField('🕒 Kurulum Zamanı', `${formatDate(new Date())}`, false)
           .setFooter({ text: `${message.guild.name} | Powered by Porsuk Support Ticket System` })
@@ -1746,9 +1746,8 @@ async function replyToTicket(interaction) {
       const replyEmbed = new MessageEmbed()
         .setColor('#3498db')
         .setTitle('💬 Yanıt Bekleniyor')
-        .setDescription('Lütfen yanıtınızı normal bir mesaj olarak yazın. Botun yanıtınızı alabilmesi için 5 dakikalık süreniz var.')
+        .setDescription('Lütfen yanıtınızı normal bir mesaj olarak yazın.')
         .addField('ℹ️ Bilgi', 'Mesajınızı yazdıktan sonra bot otomatik olarak ticketa ekleyecektir.')
-        .addField('⏱️ Süre', '5 dakika')
         .setFooter({ text: 'Cevap vermek istemiyorsanız, bu mesajı görmezden gelebilirsiniz.' })
         .setTimestamp();
       
@@ -1763,11 +1762,11 @@ async function replyToTicket(interaction) {
       const filter = m => m.author.id === interaction.user.id && m.channelId === interaction.channel.id;
       
       try {
-        // Süre aşımı sorunu çözümü - daha uzun bir süre (5 dakika) ve hata işleme
+        // Süre aşımı sorunu çözümü - sonsuz süre (0 değeri sonsuz süre anlamına gelir)
         const collected = await interaction.channel.awaitMessages({
           filter,
           max: 1,
-          time: 300000, // 5 dakika - kullanıcıya yeterli zaman vermek için
+          time: 0, // 0 = sonsuz süre (zaman aşımı yok)
           errors: [] // Boş dizi olarak değiştirdik (time hatası yok)
         }).catch(err => {
           console.error('awaitMessages error:', err);
