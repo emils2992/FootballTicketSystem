@@ -854,17 +854,18 @@ async function handleTicketKurCommand(message) {
     await message.delete();
   } catch (deleteError) {
     console.error('Ticketkur komutu silinemedi:', deleteError);
-    // Hata olursa sessizce devam et
   }
   
-  // Check if user has staff or admin permissions
-  if (!isStaffMember(message.member)) {
-    const errorMsg = await message.channel.send({ content: `<@${message.author.id}>, bu komutu kullanabilmek için yetkili olmalısın delikanlı.` });
+  // Sadece yetkililerin kullanabileceği bir komut olarak düzenle
+  if (!message.member.permissions.has('ADMINISTRATOR') && !message.member.permissions.has('MANAGE_GUILD')) {
+    const errorMsg = await message.channel.send({ 
+      content: `<@${message.author.id}>, bu komutu kullanabilmek için **Yönetici** veya **Sunucu Yönetme** yetkisine sahip olmalısın.` 
+    });
     
-    // 5 saniye sonra hata mesajını sil
+    // 8 saniye sonra hata mesajını sil
     setTimeout(() => {
       errorMsg.delete().catch(e => console.error('Hata mesajı silinemedi:', e));
-    }, 5000);
+    }, 8000);
     
     return;
   }
@@ -892,10 +893,10 @@ async function handleTicketKurCommand(message) {
     // Bu kontrol kısmını devre dışı bırakıyoruz çünkü sorun yaratabiliyor
     // Her zaman yeni bir panel oluşturması için doğrudan devam edeceğiz
     
-    // Sunucudaki rolleri daha anlaşılır şekilde göster
+    // ADIM 1: Rolleri getir ve menü için formatla
     let roles = message.guild.roles.cache
       .filter(role => !role.managed && role.id !== message.guild.id)
-      .sort((a, b) => b.position - a.position) // Rolleri pozisyona göre sırala (yukarıdan aşağıya)
+      .sort((a, b) => b.position - a.position) // Rolleri pozisyona göre sırala (en üstteki roller önce)
       .map(role => {
         return {
           label: role.name,
@@ -903,29 +904,17 @@ async function handleTicketKurCommand(message) {
           description: role.members.size > 0 ? `${role.members.size} üye sahip` : `Bu role sahip üye yok`,
           emoji: '👑'
         };
-      }).slice(0, 25); // Discord 25'ten fazla seçeneğe izin vermiyor
+      }).slice(0, 24); // Discord 25'ten fazla seçeneğe izin vermiyor (@everyone için yer bırak)
     
-    // Eğer hiç rol bulunmadıysa @everyone rolünü ekle
-    if (roles.length === 0) {
-      roles = [{
-        label: '@everyone (Varsayılan)', 
-        value: message.guild.id,
-        description: 'Sunucudaki herkes',
-        emoji: '👥'
-      }];
-    }
+    // Her zaman @everyone rolünü listenin sonuna ekle
+    roles.push({
+      label: '@everyone (Herkes)',
+      value: message.guild.id,
+      description: 'Tüm sunucu üyeleri',
+      emoji: '👥'
+    });
     
-    // Her zaman @everyone rolünü listenin sonuna ekle (en düşük öncelik)
-    if (!roles.some(role => role.value === message.guild.id)) {
-      roles.push({
-        label: '@everyone (Herkes)',
-        value: message.guild.id,
-        description: 'Tüm sunucu üyeleri',
-        emoji: '👥'
-      });
-    }
-    
-    // Daha açıklayıcı seçim menüsü
+    // Rol seçim menüsü oluştur
     const selectMenu = new MessageSelectMenu()
       .setCustomId('staff_role_select')
       .setPlaceholder('👉 Buraya tıklayıp yetkili rolünü seçin 👈')
@@ -933,7 +922,7 @@ async function handleTicketKurCommand(message) {
       
     const row = new MessageActionRow().addComponents(selectMenu);
     
-    // Daha açıklayıcı bir mesajla rol seçim menüsünü gönder
+    // ADIM 2: Rol seçimi mesajını gönder - daha açıklayıcı ve dikkat çekici
     const replyMessage = await message.channel.send({ 
       content: `🔽 **Yetkili Rolü Seçimi** 🔽\n<@${message.author.id}>, lütfen aşağıdaki menüden ticket sisteminde **yetkili** olacak rolü seçin.\nBu role sahip kişiler ticket'ları görebilecek ve yanıtlayabilecek.`, 
       components: [row]
@@ -943,42 +932,92 @@ async function handleTicketKurCommand(message) {
     const filter = i => i.customId === 'staff_role_select' && i.user.id === message.author.id;
     
     try {
-      // Rol seçimi süresi kaldırıldı - kullanıcı istediği kadar düşünebilir
+      // ADIM 3: Rol seçimini bekle - zaman sınırı olmadan
       const roleSelection = await message.channel.awaitMessageComponent({ filter });
       const selectedRoleId = roleSelection.values[0];
       const selectedRole = message.guild.roles.cache.get(selectedRoleId);
       
-      // Rol seçim mesajını sil
+      // Rol seçildikten sonra seçim mesajını sil (kullanıcı isteği üzerine)
       try {
         await replyMessage.delete().catch(e => console.error('Rol seçim mesajı silinemedi:', e));
       } catch (deleteError) {
         console.error('Rol seçim mesajını silerken hata:', deleteError);
       }
       
+      // Geçersiz rol seçimi durumunu kontrol et
       if (!selectedRole) {
-        return roleSelection.reply({ 
-          content: 'Geçersiz rol seçimi. İşlem iptal edildi.'
-          // ephemeral özelliğini kaldırdık
+        return await message.channel.send({ 
+          content: `<@${message.author.id}>, geçersiz rol seçimi. İşlem iptal edildi.`
         });
       }
       
       // Rolü kaydet
       await storage.setStaffRole(message.guild.id, selectedRoleId);
       
-      // Ticket panelini oluştur
-      const { embed, row } = await createTicketPanelEmbed(message.guild.id);
+      // Rol başarıyla kaydedildi, kullanıcıya onay ver ve panel oluşturmak isteyip istemediğini sor
+      const confirmEmbed = new MessageEmbed()
+        .setColor('#00FF00')
+        .setTitle('✅ Yetkili Rolü Ayarlandı!')
+        .setDescription(`**${selectedRole.name}** rolü artık ticket sistemi için yetkili rol olarak ayarlandı.\n\nŞimdi ticket panelini oluşturmak ister misiniz?`)
+        .setFooter({ text: 'Aşağıdaki butona tıklayarak ticket panelini oluşturabilirsiniz.' });
       
-      // Burada yeni panel oluştur
-      const sentPanel = await message.channel.send({ 
-        embeds: [embed], 
-        components: [row] 
+      // Panel oluşturma butonu
+      const createPanelButton = new MessageButton()
+        .setCustomId('create_ticket_panel')
+        .setLabel('Panel Oluştur')
+        .setStyle('PRIMARY')
+        .setEmoji('🎟️');
+      
+      const cancelButton = new MessageButton()
+        .setCustomId('cancel_panel_creation')
+        .setLabel('İptal Et')
+        .setStyle('SECONDARY');
+      
+      const confirmRow = new MessageActionRow().addComponents(createPanelButton, cancelButton);
+      
+      // Onay mesajını gönder
+      const confirmMessage = await message.channel.send({ 
+        embeds: [confirmEmbed], 
+        components: [confirmRow]
       });
       
-      // Panel bilgilerini kaydet (bu sunucuya özel)
-      await storage.updateTicketPanel(message.guild.id, message.channel.id, sentPanel.id);
+      // Buton tıklamasını bekle
+      const confirmFilter = i => (i.customId === 'create_ticket_panel' || i.customId === 'cancel_panel_creation') && i.user.id === message.author.id;
       
-      // Ayarladığın rolü ve kurulum başarılı mesajını sadece komutu yazan kişi görsün - daha güzel bir embed mesaj ile
       try {
+        // Kullanıcının cevabını bekle - süre sınırı yok
+        const buttonInteraction = await message.channel.awaitMessageComponent({ filter: confirmFilter });
+        
+        // İptal edilirse
+        if (buttonInteraction.customId === 'cancel_panel_creation') {
+          await buttonInteraction.deferUpdate();
+          await confirmMessage.edit({
+            embeds: [new MessageEmbed()
+              .setColor('#FF0000')
+              .setTitle('❌ Panel Oluşturma İptal Edildi')
+              .setDescription('Ticket paneli oluşturma işlemi iptal edildi.\nYetkili rolü ayarlandı ancak panel oluşturulmadı.\n\nDaha sonra `.ticketkur` komutunu kullanarak panel oluşturabilirsiniz.')],
+            components: []
+          });
+          return;
+        }
+        
+        // Panel oluşturmaya devam et
+        await buttonInteraction.deferUpdate();
+        
+        // Ticket panelini oluştur
+        const { embed, row } = await createTicketPanelEmbed(message.guild.id);
+        
+        // Burada yeni panel oluştur
+        const sentPanel = await message.channel.send({ 
+          embeds: [embed], 
+          components: [row] 
+        });
+        
+        // Panel bilgilerini kaydet (bu sunucuya özel)
+        await storage.updateTicketPanel(message.guild.id, message.channel.id, sentPanel.id);
+        
+        // ADIM 5: Başarı mesajı gönder
+        try {
         // Sade ve basit başarı mesajı - kullanıcı isteği üzerine
         const successEmbed = new MessageEmbed()
           .setColor('#00FF00') // Yeşil
@@ -1005,18 +1044,19 @@ async function handleTicketKurCommand(message) {
           }, 5000);
         }
         
-        // Discord.js v13'te ephemeral message için deferReply kullan (interaction yanıtı için)
-        await roleSelection.deferReply({ ephemeral: true });
-        await roleSelection.followUp({ 
-          content: "Kurulum tamamlandı! Detaylı bilgi DM'den gönderildi.",
-          ephemeral: true
+        // Tüm işlem tamamlandı, bilgilendirme mesajı
+        await confirmMessage.edit({
+          embeds: [new MessageEmbed()
+            .setColor('#00FF00')
+            .setTitle('✅ Kurulum Başarıyla Tamamlandı')
+            .setDescription(`Ticket sistemi başarıyla kuruldu. Panel bu kanalda oluşturuldu.\n\nArtık kullanıcılar panelden ticket açabilir ve **${selectedRole.name}** rolüne sahip yetkililer yardımcı olabilir.`)],
+          components: []
         });
         
-        // İşlem tamamlandıktan sonra return ile fonksiyondan çıkıyoruz - böylece tekrar çalışması önleniyor
+        // İşlem tamamlandıktan sonra
         return;
       } catch (replyError) {
-        console.error('Panel confirmation error:', replyError);
-        // Hata olursa sessizce devam et
+        console.error('Başarı mesajı gönderilemedi:', replyError);
       }
     } catch (error) {
       console.error('Role selection error:', error);
