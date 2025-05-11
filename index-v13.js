@@ -850,6 +850,7 @@ function createTicketListEmbed(tickets) {
 async function handleTicketKurCommand(message) {
   // Kullanıcı komutu silinsin (istek üzerine)
   try {
+    // Sadece kullanıcının komut mesajını sil, bot yanıtlarını silme
     await message.delete();
   } catch (deleteError) {
     console.error('Ticketkur komutu silinemedi:', deleteError);
@@ -891,37 +892,50 @@ async function handleTicketKurCommand(message) {
     // Bu kontrol kısmını devre dışı bırakıyoruz çünkü sorun yaratabiliyor
     // Her zaman yeni bir panel oluşturması için doğrudan devam edeceğiz
     
-    // Sunucudaki roller
-    let roles = message.guild.roles.cache.filter(role => 
-      !role.managed && role.id !== message.guild.id
-    ).map(role => {
-      return {
-        label: role.name, 
-        value: role.id,
-        description: `ID: ${role.id}`
-      };
-    }).slice(0, 25); // Discord 25'ten fazla seçeneğe izin vermiyor
+    // Sunucudaki rolleri daha anlaşılır şekilde göster
+    let roles = message.guild.roles.cache
+      .filter(role => !role.managed && role.id !== message.guild.id)
+      .sort((a, b) => b.position - a.position) // Rolleri pozisyona göre sırala (yukarıdan aşağıya)
+      .map(role => {
+        return {
+          label: role.name,
+          value: role.id,
+          description: role.members.size > 0 ? `${role.members.size} üye sahip` : `Bu role sahip üye yok`,
+          emoji: '👑'
+        };
+      }).slice(0, 25); // Discord 25'ten fazla seçeneğe izin vermiyor
     
     // Eğer hiç rol bulunmadıysa @everyone rolünü ekle
     if (roles.length === 0) {
       roles = [{
         label: '@everyone (Varsayılan)', 
         value: message.guild.id,
-        description: 'Sunucudaki herkes'
+        description: 'Sunucudaki herkes',
+        emoji: '👥'
       }];
     }
     
-    // Seçim menüsü
+    // Her zaman @everyone rolünü listenin sonuna ekle (en düşük öncelik)
+    if (!roles.some(role => role.value === message.guild.id)) {
+      roles.push({
+        label: '@everyone (Herkes)',
+        value: message.guild.id,
+        description: 'Tüm sunucu üyeleri',
+        emoji: '👥'
+      });
+    }
+    
+    // Daha açıklayıcı seçim menüsü
     const selectMenu = new MessageSelectMenu()
       .setCustomId('staff_role_select')
-      .setPlaceholder('Yetkili rolünü seçin')
+      .setPlaceholder('👉 Buraya tıklayıp yetkili rolünü seçin 👈')
       .addOptions(roles);
       
     const row = new MessageActionRow().addComponents(selectMenu);
     
-    // Mesajı gönder
-    const replyMessage = await message.reply({ 
-      content: 'Lütfen ticket sistemi için yetkili rolünü seçin:', 
+    // Daha açıklayıcı bir mesajla rol seçim menüsünü gönder
+    const replyMessage = await message.channel.send({ 
+      content: `🔽 **Yetkili Rolü Seçimi** 🔽\n<@${message.author.id}>, lütfen aşağıdaki menüden ticket sisteminde **yetkili** olacak rolü seçin.\nBu role sahip kişiler ticket'ları görebilecek ve yanıtlayabilecek.`, 
       components: [row]
     });
     
@@ -929,7 +943,8 @@ async function handleTicketKurCommand(message) {
     const filter = i => i.customId === 'staff_role_select' && i.user.id === message.author.id;
     
     try {
-      const roleSelection = await message.channel.awaitMessageComponent({ filter, time: 60000 });
+      // Rol seçimi süresi kaldırıldı - kullanıcı istediği kadar düşünebilir
+      const roleSelection = await message.channel.awaitMessageComponent({ filter });
       const selectedRoleId = roleSelection.values[0];
       const selectedRole = message.guild.roles.cache.get(selectedRoleId);
       
@@ -964,17 +979,13 @@ async function handleTicketKurCommand(message) {
       
       // Ayarladığın rolü ve kurulum başarılı mesajını sadece komutu yazan kişi görsün - daha güzel bir embed mesaj ile
       try {
-        // Şık bir embed oluştur
+        // Sade ve basit başarı mesajı - kullanıcı isteği üzerine
         const successEmbed = new MessageEmbed()
           .setColor('#00FF00') // Yeşil
           .setTitle('✅ Ticket Sistemi Kuruldu!')
           .setDescription(`Ticket sistemi başarıyla kuruldu ve ayarlandı!`)
           .addField('👮‍♂️ Yetkili Rolü', selectedRole ? selectedRole.name : `<@&${selectedRoleId}>`, true)
-          .addField('🎟️ Kanal', `<#${message.channel.id}>`, true)
-          .addField('🕒 Kurulum Zamanı', `${formatDate(new Date())}`, false)
-          .setFooter({ text: `${message.guild.name} | Powered by Porsuk Support Ticket System` })
-          .setThumbnail('https://i.imgur.com/pgTRpDd.png')
-          .setTimestamp();
+          .setFooter({ text: `${message.guild.name}` });
         
         // DM'den göndermeyi dene
         try {
@@ -1009,14 +1020,24 @@ async function handleTicketKurCommand(message) {
       }
     } catch (error) {
       console.error('Role selection error:', error);
-      // Rol seçimi için süre doldu mesajı kaldırıldı (kullanıcı isteği)
+      // Rol seçiminde hata olursa kullanıcıya bildir
+      try {
+        await message.channel.send({
+          content: `<@${message.author.id}>, rol seçimi sırasında bir hata oluştu. Lütfen \`.ticketkur\` komutunu tekrar kullanın.`,
+        });
+      } catch (notifyError) {
+        console.error('Error notifying user about role selection failure:', notifyError);
+      }
     }
   } catch (error) {
     console.error('Error creating ticket panel:', error);
-    message.reply({ 
-      content: 'Ticket paneli oluşturulurken bir hata oluştu.'
-      // ephemeral özelliği kaldırıldı
-    });
+    try {
+      await message.channel.send({ 
+        content: `<@${message.author.id}>, ticket paneli oluşturulurken bir hata oluştu. Lütfen biraz sonra tekrar deneyin.`
+      });
+    } catch (replyError) {
+      console.error('Error sending panel creation error message:', replyError);
+    }
   }
 }
 
@@ -1851,38 +1872,20 @@ async function replyToTicket(interaction) {
           throw new Error("Response could not be added to database");
         });
         
-        // Şekilli şukullu yanıt - kullanıcı isteği üzerine daha estetik
-        const colorOptions = ['#FF5733', '#3498DB', '#2ECC71', '#F1C40F', '#9B59B6', '#1ABC9C', '#E74C3C', '#34495E', '#16A085', '#8E44AD', '#2980B9', '#F39C12'];
-        const randomColor = colorOptions[Math.floor(Math.random() * colorOptions.length)];
-        
-        // Futbol temalı güzel emojiler
-        const footballEmojis = ['⚽', '🏆', '🥅', '🎖️', '🎮', '🔥', '🌟', '👑', '🏅', '🔰'];
+        // Daha sade yanıt formatı - kullanıcı isteği üzerine basitleştirildi
+        // Futbol temalı emojilerden birini seç
+        const footballEmojis = ['⚽', '🏆', '🥅', '🎮', '🔥'];
         const randomEmoji = footballEmojis[Math.floor(Math.random() * footballEmojis.length)];
         
-        // Kullanıcının avatarı için çerçeve efekti
-        const userAvatar = interaction.user.displayAvatarURL({ dynamic: true, size: 256 });
+        // Kullanıcının avatarı
+        const userAvatar = interaction.user.displayAvatarURL({ dynamic: true });
         
-        // Yanıt içeriğini daha güzel formatlama - kutular ve bölümler
-        let formattedReply = replyText;
-        
-        // Eğer yanıt 100 karakterden uzunsa, paragraflar halinde böl
-        if (replyText.length > 100) {
-          const sentences = replyText.split(/(?<=[.!?])\s+/);
-          formattedReply = '';
-          for (const sentence of sentences) {
-            formattedReply += `> ${sentence}\n`;
-          }
-        }
-        
-        // Süper şık ve güzel embed oluştur
+        // Daha sade embed oluştur - sadece önemli bilgileri göster
         const embed = new MessageEmbed()
-          .setColor(randomColor)
-          .setAuthor({ name: `${randomEmoji} ${interaction.user.username}`, iconURL: userAvatar })
-          .setDescription(formattedReply)
-          .addField('💬 Yanıt Zamanı', formatDate(new Date()), true)
-          .addField('🔖 Ticket ID', `#${ticketInfo.id}`, true)
-          .setFooter({ text: `${interaction.guild.name} | Ticket Sistemi` })
-          .setThumbnail('https://i.imgur.com/pgTRpDd.png')
+          .setColor('#0099ff') // Sabit renk kullan
+          .setAuthor({ name: `${interaction.user.username}`, iconURL: userAvatar })
+          .setDescription(replyText)
+          .setFooter({ text: randomEmoji })
           .setTimestamp();
         
         // Kanala bildirimde bulun - kanal hala mevcut mu kontrol et
@@ -1901,32 +1904,13 @@ async function replyToTicket(interaction) {
         
         // Temizlik - daha şık bir bildirim
         try {
-          // Ultra şekilli şukullu başarı embed'i
-          const successColors = ['#00FF1A', '#00E676', '#69F0AE', '#00C853', '#1DE9B6'];
-          const randomSuccessColor = successColors[Math.floor(Math.random() * successColors.length)];
-          
-          // Havalı başarı emojileri
-          const successEmojis = ['✨', '🌟', '✅', '☑️', '🎯', '💯', '🚀', '🏆', '💪', '👍'];
-          const randomSuccessEmoji = successEmojis[Math.floor(Math.random() * successEmojis.length)];
-          
-          // Mesaj önizlemesi
-          let messagePreview = replyText;
-          if (replyText.length > 100) {
-            messagePreview = replyText.substring(0, 95) + '...';
-          }
-          
-          // Süper şık ve animasyonlu hissiyatı veren başarı embed'i
+          // Sade başarı mesajı - kullanıcı isteği üzerine basitleştirildi
+          // Basit ve net bir başarı mesajı oluştur
           const successEmbed = new MessageEmbed()
-            .setColor(randomSuccessColor)
-            .setTitle(`${randomSuccessEmoji} Yanıt Başarıyla Gönderildi!`)
-            .setDescription(`Ticket yanıtınız başarıyla iletildi ve kaydedildi.\nYanıtınız kanalda herkese görünür şekilde paylaşıldı.`)
-            .addField('📝 Mesajınız', `\`\`\`${messagePreview}\`\`\``, false)
-            .addField('🔢 Ticket ID', `#${ticketInfo.id}`, true)
-            .addField('⏰ Yanıt Zamanı', formatDate(new Date()), true) 
-            .addField('🔔 Bilgilendirme', 'Yanıtınız kaydedildi ve kullanıcıya gönderildi. Ticketin durumu hakkında güncellemeler için kanalı takip edin.', false)
-            .setFooter({ text: `${interaction.guild.name} | Profesyonel Ticket Sistemi` })
-            .setThumbnail('https://i.imgur.com/pgTRpDd.png')
-            .setTimestamp();
+            .setColor('#00FF00') // Yeşil
+            .setTitle(`✅ Yanıt Gönderildi`)
+            .setDescription(`Mesajınız başarıyla gönderildi.`)
+            .setFooter({ text: `${interaction.guild.name}` });
           
           await interaction.followUp({ 
             embeds: [successEmbed], 
