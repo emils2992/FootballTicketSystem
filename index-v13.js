@@ -1851,12 +1851,38 @@ async function replyToTicket(interaction) {
           throw new Error("Response could not be added to database");
         });
         
-        // Sabit renk kullanımı - mizahi içerik kaldırıldı
+        // Şekilli şukullu yanıt - kullanıcı isteği üzerine daha estetik
+        const colorOptions = ['#FF5733', '#3498DB', '#2ECC71', '#F1C40F', '#9B59B6', '#1ABC9C', '#E74C3C', '#34495E', '#16A085', '#8E44AD', '#2980B9', '#F39C12'];
+        const randomColor = colorOptions[Math.floor(Math.random() * colorOptions.length)];
+        
+        // Futbol temalı güzel emojiler
+        const footballEmojis = ['⚽', '🏆', '🥅', '🎖️', '🎮', '🔥', '🌟', '👑', '🏅', '🔰'];
+        const randomEmoji = footballEmojis[Math.floor(Math.random() * footballEmojis.length)];
+        
+        // Kullanıcının avatarı için çerçeve efekti
+        const userAvatar = interaction.user.displayAvatarURL({ dynamic: true, size: 256 });
+        
+        // Yanıt içeriğini daha güzel formatlama - kutular ve bölümler
+        let formattedReply = replyText;
+        
+        // Eğer yanıt 100 karakterden uzunsa, paragraflar halinde böl
+        if (replyText.length > 100) {
+          const sentences = replyText.split(/(?<=[.!?])\s+/);
+          formattedReply = '';
+          for (const sentence of sentences) {
+            formattedReply += `> ${sentence}\n`;
+          }
+        }
+        
+        // Süper şık ve güzel embed oluştur
         const embed = new MessageEmbed()
-          .setColor('#5865F2') // Discord standart mavi renk
-          .setAuthor({ name: interaction.user.username, iconURL: interaction.user.displayAvatarURL() })
-          .setDescription(replyText)
-          .setFooter({ text: `${interaction.guild.name} | Ticket #${ticketInfo.id}` })
+          .setColor(randomColor)
+          .setAuthor({ name: `${randomEmoji} ${interaction.user.username}`, iconURL: userAvatar })
+          .setDescription(formattedReply)
+          .addField('💬 Yanıt Zamanı', formatDate(new Date()), true)
+          .addField('🔖 Ticket ID', `#${ticketInfo.id}`, true)
+          .setFooter({ text: `${interaction.guild.name} | Ticket Sistemi` })
+          .setThumbnail('https://i.imgur.com/pgTRpDd.png')
           .setTimestamp();
         
         // Kanala bildirimde bulun - kanal hala mevcut mu kontrol et
@@ -1875,15 +1901,31 @@ async function replyToTicket(interaction) {
         
         // Temizlik - daha şık bir bildirim
         try {
-          // Görkemli yanıt başarı embed'i
+          // Ultra şekilli şukullu başarı embed'i
+          const successColors = ['#00FF1A', '#00E676', '#69F0AE', '#00C853', '#1DE9B6'];
+          const randomSuccessColor = successColors[Math.floor(Math.random() * successColors.length)];
+          
+          // Havalı başarı emojileri
+          const successEmojis = ['✨', '🌟', '✅', '☑️', '🎯', '💯', '🚀', '🏆', '💪', '👍'];
+          const randomSuccessEmoji = successEmojis[Math.floor(Math.random() * successEmojis.length)];
+          
+          // Mesaj önizlemesi
+          let messagePreview = replyText;
+          if (replyText.length > 100) {
+            messagePreview = replyText.substring(0, 95) + '...';
+          }
+          
+          // Süper şık ve animasyonlu hissiyatı veren başarı embed'i
           const successEmbed = new MessageEmbed()
-            .setColor('#00FF00') // Yeşil
-            .setTitle('✅ Yanıt Gönderildi!')
-            .setDescription('Ticketa yanıtınız başarıyla iletildi.')
-            .addField('📝 Mesajınız', replyText.length > 100 ? replyText.substring(0, 97) + '...' : replyText, false)
+            .setColor(randomSuccessColor)
+            .setTitle(`${randomSuccessEmoji} Yanıt Başarıyla Gönderildi!`)
+            .setDescription(`Ticket yanıtınız başarıyla iletildi ve kaydedildi.\nYanıtınız kanalda herkese görünür şekilde paylaşıldı.`)
+            .addField('📝 Mesajınız', `\`\`\`${messagePreview}\`\`\``, false)
             .addField('🔢 Ticket ID', `#${ticketInfo.id}`, true)
-            .addField('⏰ Yanıt Zamanı', formatDate(new Date()), true)
-            .setFooter({ text: `${interaction.guild.name} | Ticket Sistemi` })
+            .addField('⏰ Yanıt Zamanı', formatDate(new Date()), true) 
+            .addField('🔔 Bilgilendirme', 'Yanıtınız kaydedildi ve kullanıcıya gönderildi. Ticketin durumu hakkında güncellemeler için kanalı takip edin.', false)
+            .setFooter({ text: `${interaction.guild.name} | Profesyonel Ticket Sistemi` })
+            .setThumbnail('https://i.imgur.com/pgTRpDd.png')
             .setTimestamp();
           
           await interaction.followUp({ 
