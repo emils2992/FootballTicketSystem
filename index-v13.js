@@ -848,7 +848,13 @@ function createTicketListEmbed(tickets) {
 
 // Command handlers
 async function handleTicketKurCommand(message) {
-  // Kullanıcı komutu silinmeyecek (istek üzerine)
+  // Kullanıcı komutu silinsin (istek üzerine)
+  try {
+    await message.delete();
+  } catch (deleteError) {
+    console.error('Ticketkur komutu silinemedi:', deleteError);
+    // Hata olursa sessizce devam et
+  }
   
   // Check if user has staff or admin permissions
   if (!isStaffMember(message.member)) {
@@ -963,7 +969,7 @@ async function handleTicketKurCommand(message) {
           .setColor('#00FF00') // Yeşil
           .setTitle('✅ Ticket Sistemi Kuruldu!')
           .setDescription(`Ticket sistemi başarıyla kuruldu ve ayarlandı!`)
-          .addField('👮‍♂️ Yetkili Rolü', `<@&${selectedRoleId}>`, true)
+          .addField('👮‍♂️ Yetkili Rolü', selectedRole ? selectedRole.name : `<@&${selectedRoleId}>`, true)
           .addField('🎟️ Kanal', `<#${message.channel.id}>`, true)
           .addField('🕒 Kurulum Zamanı', `${formatDate(new Date())}`, false)
           .setFooter({ text: `${message.guild.name} | Powered by Porsuk Support Ticket System` })
@@ -1512,11 +1518,10 @@ async function rejectTicket(interaction) {
       const filter = m => m.author.id === interaction.user.id && m.channelId === interaction.channel.id;
       
       try {
+        // Sonsuz zaman aşımı - kullanıcı istediği kadar bekleyebilir
         const collected = await interaction.channel.awaitMessages({
           filter,
-          max: 1,
-          time: 60000,
-          errors: ['time']
+          max: 1
         });
         
         // Mesaj alındıysa devam et
@@ -1749,11 +1754,10 @@ async function replyToTicket(interaction) {
       const filter = m => m.author.id === interaction.user.id && m.channelId === interaction.channel.id;
       
       try {
+        // Sonsuz zaman aşımı - kullanıcı istediği kadar bekleyebilir
         const collected = await interaction.channel.awaitMessages({
           filter,
-          max: 1,
-          time: 60000,
-          errors: ['time']
+          max: 1
         }).catch(err => {
           console.error('awaitMessages error:', err);
           return null;
@@ -1847,34 +1851,10 @@ async function replyToTicket(interaction) {
           throw new Error("Response could not be added to database");
         });
         
-        // Rastgele renk seçimi
-        const staffColors = ['#FF5733', '#33FF57', '#3357FF', '#FFC300', '#C70039', '#4C9141', '#900C3F', '#0081CF', '#5D55A3', '#2D7D86'];
-        const randomColor = staffColors[Math.floor(Math.random() * staffColors.length)];
-        
-        // İlginç emoji seçimi
-        const emojis = ['🔥', '✨', '💫', '🌟', '⚡', '🚀', '💯', '🎯', '🏆', '💪', '👑'];
-        const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-        
-        // Mizahi rastgele alt başlık
-        const subtitles = [
-          'Efsane bir yanıt geldi!',
-          'Yetkili konuştu!',
-          'İşte bu önemli!',
-          'Dikkatli oku delikanlı!',
-          'Konuştu mu devleşiyor!',
-          'Bu bilgiyi yazıp kenara koy!',
-          'Transfer döneminde bomba!',
-          'Saha kenarından son dakika!',
-          'Kadroda sürpriz değişiklik!',
-          'VAR'dan geldi bu bilgi!'
-        ];
-        const randomSubtitle = subtitles[Math.floor(Math.random() * subtitles.length)];
-        
-        // Yanıt embed'i oluştur - süper şık
+        // Sabit renk kullanımı - mizahi içerik kaldırıldı
         const embed = new MessageEmbed()
-          .setColor(randomColor)
-          .setAuthor({ name: `${randomEmoji} ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() })
-          .setTitle(randomSubtitle)
+          .setColor('#5865F2') // Discord standart mavi renk
+          .setAuthor({ name: interaction.user.username, iconURL: interaction.user.displayAvatarURL() })
           .setDescription(replyText)
           .setFooter({ text: `${interaction.guild.name} | Ticket #${ticketInfo.id}` })
           .setTimestamp();
