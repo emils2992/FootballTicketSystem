@@ -848,13 +848,7 @@ function createTicketListEmbed(tickets) {
 
 // Command handlers
 async function handleTicketKurCommand(message) {
-  // Kullanıcının yazdığı komutu sil - chat temiz kalsın
-  try {
-    await message.delete();
-  } catch (deleteError) {
-    console.error('Komut mesajı silinemedi:', deleteError);
-    // Hata olursa sessizce devam et
-  }
+  // Kullanıcı komutu silinmeyecek (istek üzerine)
   
   // Check if user has staff or admin permissions
   if (!isStaffMember(message.member)) {
@@ -919,16 +913,11 @@ async function handleTicketKurCommand(message) {
       
     const row = new MessageActionRow().addComponents(selectMenu);
     
-    // Mesajı gönder ve 5 saniye sonra otomatik sil
+    // Mesajı gönder
     const replyMessage = await message.reply({ 
       content: 'Lütfen ticket sistemi için yetkili rolünü seçin:', 
       components: [row]
     });
-    
-    // 5 saniye sonra otomatik sil
-    setTimeout(() => {
-      replyMessage.delete().catch(e => console.error('Rol seçim mesajı silinemedi:', e));
-    }, 5000); // 5 saniye sonra
     
     // Rol seçimini bekle
     const filter = i => i.customId === 'staff_role_select' && i.user.id === message.author.id;
@@ -937,6 +926,13 @@ async function handleTicketKurCommand(message) {
       const roleSelection = await message.channel.awaitMessageComponent({ filter, time: 60000 });
       const selectedRoleId = roleSelection.values[0];
       const selectedRole = message.guild.roles.cache.get(selectedRoleId);
+      
+      // Rol seçim mesajını sil
+      try {
+        await replyMessage.delete().catch(e => console.error('Rol seçim mesajı silinemedi:', e));
+      } catch (deleteError) {
+        console.error('Rol seçim mesajını silerken hata:', deleteError);
+      }
       
       if (!selectedRole) {
         return roleSelection.reply({ 
@@ -1019,13 +1015,7 @@ async function handleTicketKurCommand(message) {
 }
 
 async function handleTicketCommand(message) {
-  // Kullanıcının yazdığı komutu sil - chat temiz kalsın
-  try {
-    await message.delete();
-  } catch (deleteError) {
-    console.error('Ticket komutu silinemedi:', deleteError);
-    // Hata olursa sessizce devam et
-  }
+  // Kullanıcı komutu silinmeyecek (istek üzerine)
   
   try {
     // Kategori seçim menüsü oluştur
@@ -1280,13 +1270,7 @@ async function handleTicketCreation(message, categoryId, description) {
 }
 
 async function handleTicketlarimCommand(message) {
-  // Kullanıcının yazdığı komutu sil - chat temiz kalsın
-  try {
-    await message.delete();
-  } catch (deleteError) {
-    console.error('Ticketlarim komutu silinemedi:', deleteError);
-    // Hata olursa sessizce devam et
-  }
+  // Kullanıcı komutu silinmeyecek (istek üzerine)
   
   try {
     // Kullanıcıyı veritabanında bul
@@ -1366,13 +1350,7 @@ async function handleTicketStatsCommand(message) {
 }
 
 async function handleHelpCommand(message) {
-  // Kullanıcının yazdığı komutu sil - chat temiz kalsın
-  try {
-    await message.delete();
-  } catch (deleteError) {
-    console.error('Yardım komutu silinemedi:', deleteError);
-    // Hata olursa sessizce devam et
-  }
+  // Kullanıcı komutu silinmeyecek (istek üzerine)
 
   try {
     // Prefix'i al (bot ayarlarından veya varsayılan)
@@ -1869,11 +1847,36 @@ async function replyToTicket(interaction) {
           throw new Error("Response could not be added to database");
         });
         
-        // Yanıt embed'i oluştur
+        // Rastgele renk seçimi
+        const staffColors = ['#FF5733', '#33FF57', '#3357FF', '#FFC300', '#C70039', '#4C9141', '#900C3F', '#0081CF', '#5D55A3', '#2D7D86'];
+        const randomColor = staffColors[Math.floor(Math.random() * staffColors.length)];
+        
+        // İlginç emoji seçimi
+        const emojis = ['🔥', '✨', '💫', '🌟', '⚡', '🚀', '💯', '🎯', '🏆', '💪', '👑'];
+        const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+        
+        // Mizahi rastgele alt başlık
+        const subtitles = [
+          'Efsane bir yanıt geldi!',
+          'Yetkili konuştu!',
+          'İşte bu önemli!',
+          'Dikkatli oku delikanlı!',
+          'Konuştu mu devleşiyor!',
+          'Bu bilgiyi yazıp kenara koy!',
+          'Transfer döneminde bomba!',
+          'Saha kenarından son dakika!',
+          'Kadroda sürpriz değişiklik!',
+          'VAR'dan geldi bu bilgi!'
+        ];
+        const randomSubtitle = subtitles[Math.floor(Math.random() * subtitles.length)];
+        
+        // Yanıt embed'i oluştur - süper şık
         const embed = new MessageEmbed()
-          .setColor('#5865F2')
-          .setAuthor({ name: interaction.user.username, iconURL: interaction.user.displayAvatarURL() })
+          .setColor(randomColor)
+          .setAuthor({ name: `${randomEmoji} ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() })
+          .setTitle(randomSubtitle)
           .setDescription(replyText)
+          .setFooter({ text: `${interaction.guild.name} | Ticket #${ticketInfo.id}` })
           .setTimestamp();
         
         // Kanala bildirimde bulun - kanal hala mevcut mu kontrol et
@@ -1890,10 +1893,21 @@ async function replyToTicket(interaction) {
           return;
         }
         
-        // Temizlik - bildirim
+        // Temizlik - daha şık bir bildirim
         try {
+          // Görkemli yanıt başarı embed'i
+          const successEmbed = new MessageEmbed()
+            .setColor('#00FF00') // Yeşil
+            .setTitle('✅ Yanıt Gönderildi!')
+            .setDescription('Ticketa yanıtınız başarıyla iletildi.')
+            .addField('📝 Mesajınız', replyText.length > 100 ? replyText.substring(0, 97) + '...' : replyText, false)
+            .addField('🔢 Ticket ID', `#${ticketInfo.id}`, true)
+            .addField('⏰ Yanıt Zamanı', formatDate(new Date()), true)
+            .setFooter({ text: `${interaction.guild.name} | Ticket Sistemi` })
+            .setTimestamp();
+          
           await interaction.followUp({ 
-            content: 'Yanıtınız başarıyla gönderildi!', 
+            embeds: [successEmbed], 
             ephemeral: true 
           });
         } catch (followUpError) {
