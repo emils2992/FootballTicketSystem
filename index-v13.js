@@ -958,12 +958,16 @@ async function handleTicketKurCommand(message) {
       
       // Ayarladığın rolü ve kurulum başarılı mesajını sadece komutu yazan kişi görsün - daha güzel bir embed mesaj ile
       try {
+        // Rol bilgisini doğru şekilde göstermek için rolü al
+        const selectedRole = message.guild.roles.cache.get(selectedRoleId);
+        const roleName = selectedRole ? selectedRole.name : "Bilinmeyen rol";
+        
         // Şık bir embed oluştur
         const successEmbed = new MessageEmbed()
           .setColor('#00FF00') // Yeşil
           .setTitle('✅ Ticket Sistemi Kuruldu!')
           .setDescription(`Ticket sistemi başarıyla kuruldu ve ayarlandı!`)
-          .addField('👮‍♂️ Yetkili Rolü', `<@&${selectedRoleId}>`, true)
+          .addField('👮‍♂️ Yetkili Rolü', `${roleName} (<@&${selectedRoleId}>)`, true)
           .addField('🎟️ Kanal', `<#${message.channel.id}>`, true)
           .addField('🕒 Kurulum Zamanı', `${formatDate(new Date())}`, false)
           .setFooter({ text: `${message.guild.name} | Powered by Porsuk Support Ticket System` })
@@ -1772,8 +1776,16 @@ async function replyToTicket(interaction) {
         
         // Mesaj toplama başarısız olduysa
         if (!collected || !collected.first()) {
+          // Daha profesyonel bir hata bildirimi
+          const errorEmbed = new MessageEmbed()
+            .setColor('#FF0000') // Kırmızı
+            .setTitle('❌ Yanıt Alınamadı')
+            .setDescription('Yanıt için verilen süre doldu veya bir sorun oluştu. Lütfen tekrar deneyiniz.')
+            .setFooter({ text: 'Tekrar yanıtlamak için butona tıklayabilirsiniz.' })
+            .setTimestamp();
+          
           return interaction.followUp({ 
-            content: 'Yanıt alınamadı. İşlem iptal edildi.', 
+            embeds: [errorEmbed], 
             ephemeral: true 
           }).catch(err => console.error('Could not follow up after no collection:', err));
         }
@@ -2003,7 +2015,18 @@ client.on('messageCreate', async (message) => {
     } else if (command === 'ticketlarım' || command === 'ticketlarim') {
       await handleTicketlarimCommand(message);
     } else if (command === 'yt' || command === 'ticketstats') {
-      await handleTicketStatsCommand(message);
+      // Yetkili kontrolü ekle - sadece yetkililer kullanabilsin
+      if (isStaffMember(message.member)) {
+        await handleTicketStatsCommand(message);
+      } else {
+        // Yetkili değilse hata mesajı
+        const errorMsg = await message.channel.send({ content: `<@${message.author.id}>, bu komutu kullanabilmek için yetkili olmalısın.` });
+        
+        // 5 saniye sonra hata mesajını sil
+        setTimeout(() => {
+          errorMsg.delete().catch(e => console.error('Yetki hatası mesajı silinemedi:', e));
+        }, 5000);
+      }
     } else if (command === 'help' || command === 'yardım' || command === 'yardim') {
       await handleHelpCommand(message);
     }
