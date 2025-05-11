@@ -284,7 +284,9 @@ const storage = {
         guild_id: guildId, 
         prefix: '.', 
         last_ticket_number: 0,
-        staff_role_id: null // Yetkili rolünü botSettings içinde saklayalım
+        staff_role_id: null, // Yetkili rolünü botSettings içinde saklayalım
+        ticket_panel_channel_id: null, // Ticket panelinin olduğu kanal ID'si
+        ticket_panel_message_id: null // Ticket panel mesajının ID'si
       };
       memoryStorage.botSettings.set(guildId, settings);
       
@@ -292,6 +294,32 @@ const storage = {
       saveDataToDisk();
     }
     return settings;
+  },
+  
+  async updateTicketPanel(guildId, channelId, messageId) {
+    // Sunucu ayarlarını getir (yoksa oluştur)
+    let settings = await this.getBotSettings(guildId);
+    
+    // Panel bilgilerini güncelle
+    settings.ticket_panel_channel_id = channelId;
+    settings.ticket_panel_message_id = messageId;
+    
+    // Ayarları kaydet
+    memoryStorage.botSettings.set(guildId, settings);
+    
+    // Değişiklikleri diske kaydet
+    saveDataToDisk();
+    
+    console.log(`Sunucu ${guildId} için ticket panel bilgileri güncellendi: Kanal ${channelId}, Mesaj ${messageId}`);
+    return settings;
+  },
+  
+  async getTicketPanelInfo(guildId) {
+    const settings = await this.getBotSettings(guildId);
+    return {
+      channelId: settings.ticket_panel_channel_id,
+      messageId: settings.ticket_panel_message_id
+    };
   },
   
   async setStaffRole(guildId, roleId) {
@@ -825,6 +853,9 @@ async function handleTicketKurCommand(message) {
   memoryStorage.lastCommandTimes.set(channelAndUserKey, now);
   
   try {
+    // Bu kontrol kısmını devre dışı bırakıyoruz çünkü sorun yaratabiliyor
+    // Her zaman yeni bir panel oluşturması için doğrudan devam edeceğiz
+    
     // Sunucudaki roller
     let roles = message.guild.roles.cache.filter(role => 
       !role.managed && role.id !== message.guild.id
@@ -853,9 +884,11 @@ async function handleTicketKurCommand(message) {
       
     const row = new MessageActionRow().addComponents(selectMenu);
     
-    await message.reply({ 
+    // Normal mesaj olarak gönder (ephemeral mesajlar discord.js v13'te düzgün çalışmıyor)
+    const replyMessage = await message.reply({ 
       content: 'Lütfen ticket sistemi için yetkili rolünü seçin:', 
-      components: [row] 
+      components: [row]
+      // ephemeral: true özelliğini kaldırdık
     });
     
     // Rol seçimini bekle
@@ -867,7 +900,10 @@ async function handleTicketKurCommand(message) {
       const selectedRole = message.guild.roles.cache.get(selectedRoleId);
       
       if (!selectedRole) {
-        return message.channel.send('Geçersiz rol seçimi. İşlem iptal edildi.');
+        return roleSelection.reply({ 
+          content: 'Geçersiz rol seçimi. İşlem iptal edildi.'
+          // ephemeral özelliğini kaldırdık
+        });
       }
       
       // Rolü kaydet
@@ -875,65 +911,27 @@ async function handleTicketKurCommand(message) {
       
       // Ticket panelini oluştur
       const { embed, row } = await createTicketPanelEmbed(message.guild.id);
-      // Panel mesajını kanala gönder
-      // Önce daha önce gönderilmiş panel var mı kontrol et
-      try {
-        // Son 25 mesajı ara
-        const messages = await message.channel.messages.fetch({ limit: 25 });
-        
-        // Filtrele: bot tarafından gönderilen + embed içeren + ticket sistemine ait başlıklı
-        const existingPanels = messages.filter(m => 
-          m.author.id === client.user.id && 
-          m.embeds.length > 0 && 
-          (m.embeds[0].title === '🎟️ Futbol RP Ticket Paneli' || 
-           m.embeds[0].title === '🎟️ Porsuk Support Ticket Sistemi' ||
-           m.embeds[0].title.includes('Ticket') ||
-           m.embeds[0].title.includes('ticket'))
-        );
-        
-        if (existingPanels.size > 0) {
-          // Tüm eski panelleri sil (ilk bulduğumuz dışında)
-          if (existingPanels.size > 1) {
-            const panelsToDelete = Array.from(existingPanels.values()).slice(1);
-            for (const oldPanel of panelsToDelete) {
-              await oldPanel.delete().catch(e => console.error('Panel silinirken hata:', e));
-            }
-          }
-          
-          // Kalan paneli güncelle
-          const lastPanel = existingPanels.first();
-          await lastPanel.edit({
-            embeds: [embed],
-            components: [row]
-          });
-          
-          // Sessiz mesaj artık gösterilmiyor
-        } else {
-          // Yoksa yeni panel oluştur
-          await message.channel.send({ 
-            embeds: [embed], 
-            components: [row] 
-          });
-          
-          // Artık panel oluşturuldu mesajı gösterilmiyor
-        }
-      } catch (fetchError) {
-        console.error('Existing panels check error:', fetchError);
-        // Hata durumunda yeni panel oluştur
-        await message.channel.send({ 
-          embeds: [embed], 
-          components: [row] 
-        });
-        
-        // Panel mesajları artık gösterilmiyor
-      }
+      
+      // Burada yeni panel oluştur
+      const sentPanel = await message.channel.send({ 
+        embeds: [embed], 
+        components: [row] 
+      });
+      
+      // Panel bilgilerini kaydet (bu sunucuya özel)
+      await storage.updateTicketPanel(message.guild.id, message.channel.id, sentPanel.id);
       
       // Ayarladığın rolü ve kurulum başarılı mesajını sadece komutu yazan kişi görsün
       try {
-        await roleSelection.reply({ 
-          content: `✅ Ticket sistemi başarıyla kuruldu!\n👮‍♂️ Yetkili rolü: <@&${selectedRoleId}>\n🎟️ Ticket paneli oluşturuldu`, 
-          ephemeral: true 
+        // Discord.js v13'te ephemeral message için deferReply ve followUp kullan
+        await roleSelection.deferReply({ ephemeral: true });
+        await roleSelection.followUp({ 
+          content: `✅ Ticket sistemi başarıyla kuruldu!\n👮‍♂️ Yetkili rolü: <@&${selectedRoleId}>\n🎟️ Ticket paneli oluşturuldu`,
+          ephemeral: true
         });
+        
+        // İşlem tamamlandıktan sonra return ile fonksiyondan çıkıyoruz - böylece tekrar çalışması önleniyor
+        return;
       } catch (replyError) {
         console.error('Panel confirmation error:', replyError);
         // Hata olursa sessizce devam et
@@ -944,7 +942,10 @@ async function handleTicketKurCommand(message) {
     }
   } catch (error) {
     console.error('Error creating ticket panel:', error);
-    message.reply({ content: 'Ticket paneli oluşturulurken bir hata oluştu.' });
+    message.reply({ 
+      content: 'Ticket paneli oluşturulurken bir hata oluştu.'
+      // ephemeral özelliği kaldırıldı
+    });
   }
 }
 
@@ -1275,16 +1276,35 @@ async function handleHelpCommand(message) {
     const settings = await storage.getBotSettings(message.guild.id);
     const prefix = settings?.prefix || '.';
     
+    // Bu sunucunun yetkili rolünü kontrol et
+    const staffRoleId = settings?.staff_role_id;
+    const isUserStaff = message.member && (
+      message.member.permissions.has(Permissions.FLAGS.ADMINISTRATOR) ||
+      (staffRoleId && message.member.roles.cache.has(staffRoleId))
+    );
+    
     const embed = new MessageEmbed()
       .setColor('#5865F2')
-      .setTitle('Porsuk Support Bot Komutları')
-      .setDescription(`Aşağıdaki komutları ${prefix} önekiyle kullanabilirsiniz.`)
-      .addField(`${prefix}ticketkur`, 'Ticket sistemini kur ve paneli gönder (Sadece yetkililer)', false)
-      // .ticket komutu kaldırıldı, artık panel kullanılıyor
-      .addField(`${prefix}ticketlarım`, 'Oluşturduğunuz ticketları listele', false)
-      .addField(`${prefix}yt`, 'Yetkililerin kaç ticket kapattığını göster (Sadece yetkililer)', false)
-      .addField(`${prefix}help`, 'Bu yardım mesajını göster', false)
-      .setFooter({ text: 'Porsuk Support Ticket Sistemi' });
+      .setTitle('Futbol Bot Komutları')
+      .setDescription(`Aşağıdaki komutları **${prefix}** önekiyle kullanabilirsiniz.`)
+      .setThumbnail('https://i.imgur.com/pgTRpDd.png');
+    
+    // Kullanıcı komutları
+    embed.addField('📝 Kullanıcı Komutları', `
+      \`${prefix}ticketlarım\` - Oluşturduğunuz ticketları listeler
+      \`${prefix}help\` - Bu yardım mesajını gösterir
+      \`${prefix}ping\` - Botun gecikme süresini gösterir
+    `, false);
+    
+    // Yetkili ise yetkili komutlarını da göster
+    if (isUserStaff) {
+      embed.addField('🛡️ Yetkili Komutları', `
+        \`${prefix}ticketkur\` - Ticket sistemini kurar ve panel gönderir
+        \`${prefix}yt\` - Yetkililerin kaç ticket kapattığını gösterir
+      `, false);
+    }
+    
+    embed.setFooter({ text: 'Porsuk Support Ticket Sistemi' });
     
     message.reply({ embeds: [embed] });
   } catch (error) {
@@ -1852,9 +1872,9 @@ client.on('messageCreate', async (message) => {
         content: `Pong! Bot gecikmesi: ${client.ws.ping}ms`,
         allowedMentions: { parse: ['users'], everyone: false }
       });
-    } else if (command === 'ticket' || command === 'ticketkur' || command === 'ticketkurpaneli') {
+    } else if (command === 'ticketkur') {
       await handleTicketKurCommand(message);
-    // .ticket komutu kaldırıldı
+    // 'ticket' ve 'ticketkurpaneli' komutlarını kaldırdık
     } else if (command === 'ticketlarım' || command === 'ticketlarim') {
       await handleTicketlarimCommand(message);
     } else if (command === 'yt' || command === 'ticketstats') {
